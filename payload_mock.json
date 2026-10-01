@@ -1,0 +1,45 @@
+{
+  "marca": "Finca",
+  "categoria": "ganadera",
+  "palabra_categoria": "Encuentro",
+  "palabra_titulo": "Tecnico",
+  "background_file": "potrero_extenso_aereo_dron.jpg",
+  "fecha_texto": [
+    "24 de Septiembre",
+    "de 2026",
+    "3:00 p.m.",
+    "Finca La Esperanza"
+  ],
+  "tema_evento": "Jornada Tecnica de Nutricion Animal",
+  "ponentes": [
+    {
+      "name": "Dr. Juan Perez",
+      "role": "Medico Veterinario",
+      "empresa": "Grupo Bios",
+      "tema": "Nutricion de precision",
+      "photo": ""
+    },
+    {
+      "name": "Ing. Maria Gomez",
+      "role": "Zootecnista",
+      "empresa": "Finca",
+      "tema": "Suplementacion estrategica",
+      "photo": ""
+    },
+    {
+      "name": "Dr. Carlos Ruiz",
+      "role": "Nutricionista Animal",
+      "empresa": "Grupo Bios",
+      "tema": "Manejo de praderas",
+      "photo": ""
+    },
+    {
+      "name": "Ing. Laura Diaz",
+      "role": "Ingeniera Agropecuaria",
+      "empresa": "Finca",
+      "tema": "Costos de produccion",
+      "photo": ""
+    }
+  ],
+  "apoyos_texto": "Con el apoyo de Contegral"
+}

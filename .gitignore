@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Generados / efimeros
+output/
+uploads/
+
+# Fondos reales (pesados, no son codigo - se comparten aparte)
+assets/backgrounds/
+
+# Local
+.env
+*.log

@@ -1,0 +1,27 @@
+{
+  "marca": "Finca",
+  "categoria": "ganadera",
+  "palabra_categoria": "Charla",
+  "palabra_titulo": "Maestra",
+  "background_file": "vaca_lechera_pastizal_verde.jpg",
+  "fecha_texto": ["24 de Septiembre", "de 2026", "3:00 p.m.", "Finca La Esperanza"],
+  "tema_evento": "Jornada Tecnica de Nutricion Animal",
+  "ponentes": [
+    {
+      "name": "Dr. Juan Perez",
+      "role": "Medico Veterinario",
+      "empresa": "Grupo Bios",
+      "tema": "Manejo nutricional en epoca de lluvias",
+      "photo": ""
+    },
+    {
+      "name": "Ing. Maria Gomez",
+      "role": "Zootecnista",
+      "empresa": "Finca",
+      "tema": "Suplementacion estrategica del hato",
+      "photo": ""
+    }
+  ],
+  "apoyo_logo": "",
+  "apoyos_texto": "Con el apoyo de Contegral"
+}

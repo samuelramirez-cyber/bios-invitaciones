@@ -1,0 +1,6 @@
+Pillow
+Flask
+requests
+streamlit
+pyngrok
+numpy

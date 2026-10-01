@@ -1,0 +1,15 @@
+{
+  "case_id": "case_a_text_only",
+  "description": "0 ponentes - solo titulo/fecha arriba y subtitulo sobre la foto",
+  "safe_area": { "top": 70, "bottom": 1860 },
+  "colors": { "text_primary": [255, 255, 255], "text_muted": [210, 210, 210] },
+  "bounding_boxes": {
+    "category_word": { "x": 60, "y": 80, "font_size": 46 },
+    "headline_word": { "x": 60, "y": 134, "font_size": 88 },
+    "divider": { "gap": 40, "y_top": 80, "y_bottom": 300 },
+    "date_block": { "x_right": 1020, "y": 88, "font_size": 30, "line_spacing": 8 },
+    "subtitle": { "y": 500, "max_width": 900, "font_size": 44, "frame_margin": 40 },
+    "maestria_badge": { "y": 1560 },
+    "sponsor": { "y": 1750 }
+  }
+}

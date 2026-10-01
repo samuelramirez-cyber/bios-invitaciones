@@ -1,0 +1,16 @@
+{
+  "marca": "Finca",
+  "categoria": "ganadera",
+  "palabra_categoria": "Charla",
+  "palabra_titulo": "Maestra",
+  "background_file": "potrero_aereo_dron_arboles.jpg",
+  "fecha_texto": ["24 de Septiembre", "de 2026", "3:00 p.m.", "Finca La Esperanza"],
+  "tema_evento": "Jornada Tecnica de Nutricion Animal",
+  "ponentes": [
+    { "name": "Dr. Juan Perez", "role": "Medico Veterinario", "empresa": "Grupo Bios", "tema": "Manejo nutricional en epoca de lluvias", "photo": "juan_perez.jpg" },
+    { "name": "Ing. Maria Gomez", "role": "Zootecnista", "empresa": "Finca", "tema": "Suplementacion estrategica", "photo": "maria_gomez.jpg" },
+    { "name": "Dr. Carlos Ruiz", "role": "Nutricionista Animal", "empresa": "Grupo Bios", "tema": "Manejo de praderas", "photo": "" },
+    { "name": "Ing. Laura Diaz", "role": "Ingeniera Agropecuaria", "empresa": "Finca", "tema": "Costos de produccion", "photo": "" }
+  ],
+  "apoyos_texto": "Con el apoyo de Contegral"
+}
