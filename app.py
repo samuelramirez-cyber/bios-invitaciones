@@ -6,6 +6,11 @@ Reusa el mismo pipeline que main.py / webhook_server.py / batch_processor.py
 la interfaz nunca se desincronice del motor de renderizado. Cualquier
 [AVISO]/[ERROR] que el pipeline ya imprime por consola (fallback de fondo,
 foto de ponente, logo, config) se captura y se muestra como alerta visual.
+
+El formulario replica los campos reales del formulario Microsoft Forms que
+ya usaba el cliente (marca lider, tipo de evento con 3 ramas, informacion
+administrativa) - ver notas de asuncion marcadas con [ASUNCION] mas abajo,
+pendientes de confirmar con el cliente.
 """
 
 import contextlib
@@ -26,9 +31,29 @@ OUTPUT_DIR = BASE_DIR / "output" / "streamlit"
 BATCH_OUTPUT_DIR = OUTPUT_DIR / "batch"
 UPLOADS_DIR = OUTPUT_DIR / "_uploads"
 
-MARCAS = ["Contegral", "Finca"]
+# ---------------------------------------------------------------------------
+# Marca lider que convoca (Q1 del formulario real del cliente). Las 4
+# opciones de programa/sinergia no son simplemente "Contegral" o "Finca" -
+# [ASUNCION] se mapean a la combinacion de marca mas probable para efectos
+# de tipografia/logo (ver assets_manager.FONT_FAMILY_BY_MARCA); confirmar la
+# regla real con el cliente cuando se defina.
+# ---------------------------------------------------------------------------
+MARCA_LIDER_OPCIONES = [
+    "Contegral", "Finca", "Contegral + Finca", "Cinta Azul",
+    "Equinos Bios", "Sinergia Ganadería", "Sinergia Porcicultura", "Otro",
+]
+MARCA_LIDER_A_MARCA = {
+    "Contegral": ["Contegral"],
+    "Finca": ["Finca"],
+    "Contegral + Finca": ["Contegral", "Finca"],
+    "Cinta Azul": ["Contegral"],              # [ASUNCION] linea equina de Contegral
+    "Equinos Bios": ["Contegral", "Finca"],   # [ASUNCION] programa conjunto
+    "Sinergia Ganadería": ["Contegral", "Finca"],
+    "Sinergia Porcicultura": ["Contegral", "Finca"],
+}
+MARCA_LIDER_ASUNCION = {"Cinta Azul", "Equinos Bios", "Sinergia Ganadería", "Sinergia Porcicultura"}
+
 CATEGORIAS = ["Ganadería", "Porcicultura", "Avicultura", "Acuícola", "Cunicultura", "Equinos", "Campo"]
-TIPOS_EVENTO = ["Charla", "Encuentro", "Día de Campo"]
 
 # Categorias cuyo icono de linea real (assets/icons/{Marca}/) es ambiguo sin
 # una sub-linea explicita - ver AssetRepository.get_category_icon().
@@ -37,15 +62,37 @@ SUB_LINEAS_POR_CATEGORIA = {
     "Avicultura": ["Ponedoras", "Engorde"],
 }
 
-# Palabra grande (headline, blanca) derivada del tipo de evento - el usuario
-# solo elige la palabra pequena (categoria de evento); ver main.py / assets/Templates/.
-HEADLINE_POR_TIPO = {
-    "Charla": "Maestra",
-    "Encuentro": "Tecnico",
-    "Día de Campo": "Ganadero",
-}
+# Tipo de evento (Q2 del formulario real): Charla Maestra y Dia de Campo
+# comparten exactamente las mismas preguntas (hasta 3 charlas con
+# expositor/empresa); Actividad Promocional tiene su propio set de campos.
+TIPOS_EVENTO = ["Charla Maestra", "Día de Campo", "Actividad Promocional"]
+TIPOS_CON_CHARLAS = ("Charla Maestra", "Día de Campo")
+MAX_CHARLAS = 3
 
-MAX_PONENTES = 4
+TIPOS_ACTIVACION = [
+    "Día del pollito", "Día del ganadero", "Día del acuicultor",
+    "Día del caballo (Cinta Azul)", "Día del caballo (Rodeo)",
+    "Día de lechón", "Día del cerdo", "Día Contegral", "Día Finca",
+]
+
+# Palabra pequena (acento) + palabra grande (blanca) del bloque de titulo -
+# ver main.py. Charla Maestra/Dia de Campo son fijas; Actividad Promocional
+# depende del tipo de activacion elegido.
+HEADLINE_POR_TIPO_EVENTO = {
+    "Charla Maestra": ("Charla", "Maestra"),
+    "Día de Campo": ("Día de", "Campo"),
+}
+HEADLINE_POR_ACTIVACION = {
+    "Día del pollito": ("Día", "del Pollito"),
+    "Día del ganadero": ("Día", "del Ganadero"),
+    "Día del acuicultor": ("Día", "del Acuicultor"),
+    "Día del caballo (Cinta Azul)": ("Día del Caballo", "Cinta Azul"),
+    "Día del caballo (Rodeo)": ("Día del Caballo", "Rodeo"),
+    "Día de lechón": ("Día de", "Lechón"),
+    "Día del cerdo": ("Día del", "Cerdo"),
+    "Día Contegral": ("Día", "Contegral"),
+    "Día Finca": ("Día", "Finca"),
+}
 
 st.set_page_config(
     page_title="Generador Automatizado de Invitaciones - Grupo Bios",
@@ -56,24 +103,6 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 # Utilidades
 # ---------------------------------------------------------------------------
-
-def _construir_payload_formulario(datos: Dict[str, Any], ponentes: List[Dict[str, str]]) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {
-        "marca": datos["marca"],
-        "categoria": datos["categoria"],
-        "palabra_categoria": datos["tipo_evento"],
-        "palabra_titulo": HEADLINE_POR_TIPO.get(datos["tipo_evento"], "Maestra"),
-        "tema_evento": datos["titulo"],
-        "fecha_texto": [v for v in (datos["fecha"], datos["hora"], datos["lugar"]) if v],
-        "ponentes": ponentes,
-        "apoyos_texto": datos["apoyos_texto"],
-    }
-    if datos.get("sub_linea"):
-        payload["sub_linea"] = datos["sub_linea"]
-    if datos.get("logos_aliados"):
-        payload["logos_aliados"] = datos["logos_aliados"]
-    return payload
-
 
 def _mostrar_mensajes_capturados(texto: str) -> None:
     """Traduce los [AVISO]/[ERROR] que imprime el pipeline a alertas visuales de Streamlit."""
@@ -123,33 +152,60 @@ with tab_generar:
     with col_form:
         st.subheader("Datos del evento")
 
-        marca = st.multiselect(
-            "Marca (elige ambas si el evento es co-marca)",
-            MARCAS, default=[MARCAS[0]], key="marca",
-        )
-        if len(marca) > 1:
-            st.caption("Evento co-marca: se usa la tipografia Alexandria (regla Contegral+Finca).")
+        marca_lider = st.selectbox("Marca líder que convoca", MARCA_LIDER_OPCIONES, key="marca_lider")
+        marca_lider_otro = ""
+        if marca_lider == "Otro":
+            marca_lider_otro = st.text_input("Especifique la marca/programa", key="marca_lider_otro")
+        if marca_lider in MARCA_LIDER_ASUNCION:
+            st.caption("⚠️ Tipografía/logo asumidos para este programa — pendiente de confirmar con el cliente.")
+        marca = MARCA_LIDER_A_MARCA.get(marca_lider, [])
+
         categoria = st.multiselect(
-            "Categoría (elige varias si el evento cubre mas de una linea)",
+            "Línea de negocio (elige varias si el evento cubre mas de una)",
             CATEGORIAS, default=[CATEGORIAS[0]], key="categoria",
         )
         if len(categoria) > 1:
             st.caption("Evento multi-linea: se usa un color neutro y la insignia lista todas las categorias elegidas.")
 
-        # El icono real de linea (assets/icons/{Marca}/) es ambiguo para
-        # Ganaderia/Avicultura sin esta sub-linea - solo aplica cuando hay
-        # exactamente una categoria seleccionada y esa categoria la necesita.
         sub_linea = None
         if len(categoria) == 1 and categoria[0] in SUB_LINEAS_POR_CATEGORIA:
             opciones_sub = SUB_LINEAS_POR_CATEGORIA[categoria[0]]
             sub_linea = st.radio(f"Sub-línea de {categoria[0]}", opciones_sub, key="sub_linea", horizontal=True)
 
-        tipo_evento = st.selectbox("Tipo de evento", TIPOS_EVENTO, key="tipo_evento")
+        tipo_evento = st.radio("Tipo de evento", TIPOS_EVENTO, key="tipo_evento")
+        st.caption("Los eventos tipo Encuentro o Jornada no se gestionan por este formulario: van directo con los jefes de mercadeo.")
 
-        titulo = st.text_input("Título del evento", key="titulo", placeholder="Ej. Manejo Reproductivo Bovino")
-        fecha = st.text_input("Fecha", key="fecha", placeholder="Ej. 24 de Septiembre de 2026")
-        hora = st.text_input("Hora", key="hora", placeholder="Ej. 3:00 p.m.")
-        lugar = st.text_input("Lugar", key="lugar", placeholder="Ej. Auditorio Central")
+        titulo_evento = fecha = hora = lugar = ""
+        tipo_activacion = None
+        descripcion_promocion = ""
+        fecha_inicio_promo = fecha_fin_promo = None
+        unidades_disponibles = ""
+
+        if tipo_evento in TIPOS_CON_CHARLAS:
+            titulo_evento = st.text_input("Título del evento", key="titulo", placeholder="Ej. Manejo Reproductivo Bovino")
+            fecha = st.text_input("Fecha", key="fecha", placeholder="Ej. 24 de Septiembre de 2026")
+            hora = st.text_input("Hora", key="hora", placeholder="Ej. 3:00 p.m.")
+            lugar = st.text_input("Lugar", key="lugar", placeholder="Ej. Auditorio Central")
+        else:
+            tipo_activacion = st.selectbox("Tipo de activación", TIPOS_ACTIVACION, key="tipo_activacion")
+            descripcion_promocion = st.text_area(
+                "Describa en qué consiste la promoción", key="descripcion_promocion",
+                placeholder=(
+                    'Ej. "Por la compra de X unidades, lleva Y gratis" o "Nuestros expertos estarán '
+                    'con nosotros, visítanos para asesorarte. Tendremos regalos y sorpresas por tu '
+                    'compra en la marca."'
+                ),
+            )
+            st.caption("Este texto queda sujeto a validación humana antes de publicarse.")
+            col_fi, col_ff = st.columns(2)
+            fecha_inicio_promo = col_fi.date_input("Fecha inicial de la promoción", key="fecha_inicio_promo")
+            fecha_fin_promo = col_ff.date_input("Fecha final de la promoción", key="fecha_fin_promo")
+            unidades_disponibles = st.text_area(
+                "Unidades disponibles de cada referencia involucrada", key="unidades_disponibles",
+                placeholder="Ej. Ref. 1234 - 500 unidades; Ref. 5678 - 300 unidades",
+            )
+            st.caption("Dato administrativo — no se imprime en la pieza.")
+
         apoyos_texto = st.text_input(
             "Pata / Sponsors (texto de apoyo, si no subes logos abajo)",
             key="apoyos_texto", placeholder="Ej. Con el apoyo de Contegral",
@@ -159,25 +215,32 @@ with tab_generar:
             type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_aliados",
         )
 
-        st.divider()
-        st.subheader("Ponentes")
-        num_ponentes = st.number_input("Cantidad de ponentes", min_value=0, max_value=MAX_PONENTES, value=0, step=1, key="num_ponentes")
+        ponentes: List[Dict[str, Any]] = []
+        if tipo_evento in TIPOS_CON_CHARLAS:
+            st.divider()
+            st.subheader("Charlas")
+            num_charlas = st.radio(
+                "¿Cuántas charlas tendrá el evento?", list(range(1, MAX_CHARLAS + 1)),
+                key="num_charlas", horizontal=True,
+            )
+            for i in range(int(num_charlas)):
+                with st.expander(f"Charla {i + 1}", expanded=True):
+                    titulo_charla = st.text_input("Título de la charla", key=f"charla_{i}_titulo")
+                    expositor = st.text_input("Nombre del expositor", key=f"charla_{i}_expositor")
+                    empresa_expositor = st.text_input("Empresa del expositor", key=f"charla_{i}_empresa")
+                    foto_subida = st.file_uploader(
+                        "Foto del expositor (opcional)", type=["png", "jpg", "jpeg"], key=f"charla_{i}_foto",
+                    )
+                    if expositor.strip():
+                        ponentes.append({
+                            "name": expositor, "role": "", "empresa": empresa_expositor, "tema": titulo_charla,
+                            "_foto_subida": foto_subida,
+                        })
 
-        ponentes: List[Dict[str, str]] = []
-        for i in range(int(num_ponentes)):
-            with st.expander(f"Ponente {i + 1}", expanded=True):
-                nombre = st.text_input("Nombre", key=f"ponente_{i}_nombre")
-                cargo = st.text_input("Cargo", key=f"ponente_{i}_cargo")
-                empresa = st.text_input("Empresa", key=f"ponente_{i}_empresa")
-                tema = st.text_input("Tema de la charla", key=f"ponente_{i}_tema")
-                foto_subida = st.file_uploader(
-                    "Foto (opcional)", type=["png", "jpg", "jpeg"], key=f"ponente_{i}_foto",
-                )
-                if nombre.strip():
-                    ponentes.append({
-                        "name": nombre, "role": cargo, "empresa": empresa, "tema": tema,
-                        "_foto_subida": foto_subida,
-                    })
+        st.divider()
+        st.subheader("Información administrativa")
+        centro_operativo = st.text_input("Centro Operativo", key="centro_operativo")
+        observaciones = st.text_area("Observaciones adicionales", key="observaciones")
 
         st.divider()
         generar = st.button("🎨 Generar Invitación", type="primary", width="stretch")
@@ -186,10 +249,17 @@ with tab_generar:
         st.subheader("Resultado")
 
         if generar:
-            if not titulo.strip():
-                st.error("El campo 'Título del evento' es obligatorio.")
-            elif not marca:
-                st.error("Selecciona al menos una Marca.")
+            if tipo_evento in TIPOS_CON_CHARLAS:
+                campo_obligatorio_ok = bool(titulo_evento.strip())
+                mensaje_falta = "El campo 'Título del evento' es obligatorio."
+            else:
+                campo_obligatorio_ok = bool(descripcion_promocion.strip())
+                mensaje_falta = "El campo 'Describa en qué consiste la promoción' es obligatorio."
+
+            if not campo_obligatorio_ok:
+                st.error(mensaje_falta)
+            elif not categoria:
+                st.error("Selecciona al menos una Línea de negocio.")
             else:
                 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -216,15 +286,44 @@ with tab_generar:
                     else:
                         p["photo"] = ""
                     ponentes_resueltos.append(p)
-                ponentes = ponentes_resueltos
 
-                datos_formulario = {
-                    "marca": marca, "categoria": categoria, "tipo_evento": tipo_evento,
-                    "titulo": titulo, "fecha": fecha, "hora": hora, "lugar": lugar,
-                    "apoyos_texto": apoyos_texto, "sub_linea": sub_linea,
-                    "logos_aliados": rutas_logos_aliados,
+                if tipo_evento in TIPOS_CON_CHARLAS:
+                    palabra_categoria, palabra_titulo = HEADLINE_POR_TIPO_EVENTO[tipo_evento]
+                    tema_evento = titulo_evento
+                    fecha_texto = [v for v in (fecha, hora, lugar) if v]
+                else:
+                    palabra_categoria, palabra_titulo = HEADLINE_POR_ACTIVACION.get(
+                        tipo_activacion, ("Actividad", "Promocional"),
+                    )
+                    tema_evento = descripcion_promocion
+                    fecha_texto = [
+                        v for v in (
+                            f"Vigente del {fecha_inicio_promo.strftime('%d/%m/%Y')}" if fecha_inicio_promo else "",
+                            f"al {fecha_fin_promo.strftime('%d/%m/%Y')}" if fecha_fin_promo else "",
+                        ) if v
+                    ]
+
+                payload: Dict[str, Any] = {
+                    "marca": marca,
+                    "categoria": categoria,
+                    "palabra_categoria": palabra_categoria,
+                    "palabra_titulo": palabra_titulo,
+                    "tema_evento": tema_evento,
+                    "fecha_texto": fecha_texto,
+                    "ponentes": ponentes_resueltos,
+                    "apoyos_texto": apoyos_texto,
+                    # Metadata administrativa del formulario - no se dibuja en la pieza.
+                    "marca_lider": marca_lider_otro if marca_lider == "Otro" else marca_lider,
+                    "centro_operativo": centro_operativo,
+                    "observaciones": observaciones,
                 }
-                payload = _construir_payload_formulario(datos_formulario, ponentes)
+                if sub_linea:
+                    payload["sub_linea"] = sub_linea
+                if rutas_logos_aliados:
+                    payload["logos_aliados"] = rutas_logos_aliados
+                if tipo_evento == "Actividad Promocional":
+                    payload["tipo_activacion"] = tipo_activacion
+                    payload["unidades_disponibles"] = unidades_disponibles
 
                 nombre_archivo = f"invitacion_{int(time.time() * 1000)}.png"
                 destino = OUTPUT_DIR / nombre_archivo
