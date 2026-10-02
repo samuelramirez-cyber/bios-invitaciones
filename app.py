@@ -26,6 +26,7 @@ import streamlit as st
 from PIL import Image
 
 import main as pipeline
+from assets_manager import CATEGORY_KEYWORDS
 from batch_processor import generar_reporte_resumen, process_csv_file, process_json_folder
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -59,6 +60,18 @@ MARCA_LIDER_A_MARCA = {
 MARCA_LIDER_ASUNCION = {"Cinta Azul", "Equinos Bios", "Sinergia Ganadería", "Sinergia Porcicultura"}
 
 CATEGORIAS = ["Ganadería", "Porcicultura", "Avicultura", "Acuícola", "Cunicultura", "Equinos", "Campo"]
+
+# Palabras clave (sobre el nombre de archivo) para filtrar la galeria de fondos
+# por linea de negocio. Equinos/Cunicultura aun no tienen fondos propios.
+PALABRAS_FONDO_POR_LINEA = {
+    "Ganadería": CATEGORY_KEYWORDS["ganaderia"],
+    "Porcicultura": CATEGORY_KEYWORDS["porcicultura"],
+    "Avicultura": CATEGORY_KEYWORDS["avicola"],
+    "Acuícola": CATEGORY_KEYWORDS["campo"] + ["pez"],
+    "Campo": CATEGORY_KEYWORDS["campo"],
+    "Equinos": [],
+    "Cunicultura": [],
+}
 
 # Categorias cuyo icono de linea real (assets/icons/{Marca}/) es ambiguo sin
 # una sub-linea explicita - ver AssetRepository.get_category_icon().
@@ -260,10 +273,21 @@ with tab_generar:
             st.caption(f"Fondo elegido: {fondo_elegido}")
         else:
             st.caption("Automático: se elige al azar uno acorde a la línea de negocio. Revisa la vista previa o elige uno de la galería.")
-        with st.expander(f"Elegir de la galería ({len(fondos_disponibles)} fondos)"):
+        palabras_linea = [p for linea in categoria for p in PALABRAS_FONDO_POR_LINEA.get(linea, [])]
+        fondos_de_la_linea = [f for f in fondos_disponibles if any(p in f.stem.lower() for p in palabras_linea)]
+        mostrar_todos = st.checkbox("Mostrar fondos de todas las líneas", key="fondos_todos")
+        if mostrar_todos or not fondos_de_la_linea:
+            fondos_galeria = fondos_disponibles
+            if not mostrar_todos:
+                st.caption("No hay fondos específicos para la línea elegida; se muestran todos.")
+        else:
+            fondos_galeria = fondos_de_la_linea
+        if fondo_elegido and archivo_fondo_propio is None and (BACKGROUNDS_DIR / fondo_elegido) not in fondos_galeria:
+            st.warning("El fondo elegido no corresponde a la línea de negocio seleccionada.")
+        with st.expander(f"Elegir de la galería ({len(fondos_galeria)} fondos)"):
             st.button("Automático (según línea de negocio)", key="fondo_auto", on_click=_elegir_fondo, args=(None,))
             columnas_fondos = st.columns(2)
-            for i, ruta_fondo in enumerate(fondos_disponibles):
+            for i, ruta_fondo in enumerate(fondos_galeria):
                 with columnas_fondos[i % 2]:
                     miniatura = _miniatura_fondo(ruta_fondo)
                     if miniatura:
