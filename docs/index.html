@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generador de Invitaciones - Grupo Bios</title>
+<style>
+  :root { --bg:#f6f7f4; --ink:#1d2320; --muted:#5d665f; --card:#ffffff; --line:#e0e4dc; --accent:#53ad32; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121513; --ink:#eef1ec; --muted:#9aa49b; --card:#1b1f1c; --line:#2b312c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:1040px; margin:0 auto; padding:48px 16px 72px; }
+  h1 { font-size:clamp(1.8rem, 4vw, 2.6rem); line-height:1.15; margin:0 0 12px; }
+  h2 { font-size:1.3rem; margin:48px 0 16px; }
+  p.lead { color:var(--muted); max-width:62ch; margin:0 0 20px; }
+  .tag { display:inline-block; padding:2px 10px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:.85rem; margin:0 6px 6px 0; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:16px; }
+  figure { margin:0; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  figure img { display:block; width:100%; height:auto; }
+  figcaption { padding:10px 12px; font-size:.9rem; color:var(--muted); }
+  ul { padding-left:1.2rem; } li { margin:6px 0; }
+  a { color:var(--accent); }
+  .note { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; padding:12px 16px; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Generador Automatizado de Invitaciones</h1>
+  <p class="lead">Motor en Python (Pillow) que arma las invitaciones de Contegral y Finca a partir de un formulario: sin IA generativa, costo cero y con el sistema visual real de las marcas.</p>
+  <span class="tag">Contegral</span><span class="tag">Finca</span><span class="tag">Pillow</span><span class="tag">Streamlit</span>
+
+  <h2>Ejemplos generados por el motor</h2>
+  <div class="grid">
+    <figure><img src="samples/charla_maestra_avicola.jpg" alt="Charla Maestra avícola con un ponente" loading="lazy"><figcaption>Charla Maestra - 1 ponente</figcaption></figure>
+    <figure><img src="samples/dia_de_campo_2_charlas.jpg" alt="Día de Campo con dos charlas" loading="lazy"><figcaption>Día de Campo - 2 charlas</figcaption></figure>
+    <figure><img src="samples/actividad_promocional.jpg" alt="Actividad promocional co-marca" loading="lazy"><figcaption>Actividad Promocional - co-marca y multi-línea</figcaption></figure>
+    <figure><img src="samples/charla_con_aliados.jpg" alt="Charla Maestra porcícola con logos aliados" loading="lazy"><figcaption>Charla Maestra - fila de logos aliados</figcaption></figure>
+  </div>
+
+  <h2>Qué hace</h2>
+  <ul>
+    <li>Tres tipos de pieza: Charla Maestra, Día de Campo y Actividad Promocional.</li>
+    <li>Tipografía y color por marca y línea de negocio (ganadera, porcícola, avícola, equina, acuícola).</li>
+    <li>Generación individual, por lote (CSV/JSON) o desde un webhook de formularios.</li>
+  </ul>
+
+  <h2>Código</h2>
+  <p class="note">Esta página es solo una vista previa estática. La herramienta corre localmente con <code>streamlit run app.py</code>. Código en <a href="https://github.com/samuelramirez-cyber/bios-invitaciones">github.com/samuelramirez-cyber/bios-invitaciones</a>.</p>
+</main>
+</body>
+</html>
