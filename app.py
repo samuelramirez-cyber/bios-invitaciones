@@ -18,10 +18,12 @@ import io
 import json
 import shutil
 import time
+import warnings
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import streamlit as st
+from PIL import Image
 
 import main as pipeline
 from batch_processor import generar_reporte_resumen, process_csv_file, process_json_folder
@@ -30,6 +32,9 @@ BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / "output" / "streamlit"
 BATCH_OUTPUT_DIR = OUTPUT_DIR / "batch"
 UPLOADS_DIR = OUTPUT_DIR / "_uploads"
+BACKGROUNDS_DIR = BASE_DIR / "assets" / "backgrounds"
+THUMBS_DIR = OUTPUT_DIR / "_thumbs"
+BACKGROUND_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
 # ---------------------------------------------------------------------------
 # Marca lider que convoca (Q1 del formulario real del cliente). Las 4
@@ -103,6 +108,37 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 # Utilidades
 # ---------------------------------------------------------------------------
+
+def _listar_fondos() -> List[Path]:
+    if not BACKGROUNDS_DIR.is_dir():
+        return []
+    return sorted(
+        p for p in BACKGROUNDS_DIR.iterdir()
+        if p.is_file() and p.suffix.lower() in BACKGROUND_EXTENSIONS
+    )
+
+
+def _miniatura_fondo(ruta: Path) -> Optional[str]:
+    """Miniatura JPG cacheada en disco (los fondos originales pesan hasta ~90MB)."""
+    destino = THUMBS_DIR / f"{ruta.stem}.jpg"
+    try:
+        if not destino.is_file() or destino.stat().st_mtime < ruta.stat().st_mtime:
+            THUMBS_DIR.mkdir(parents=True, exist_ok=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                with Image.open(ruta) as im:
+                    im.draft("RGB", (600, 1000))
+                    miniatura = im.convert("RGB")
+            miniatura.thumbnail((300, 520))
+            miniatura.save(destino, quality=80)
+        return str(destino)
+    except Exception:
+        return None
+
+
+def _elegir_fondo(nombre: Optional[str]) -> None:
+    st.session_state["fondo_elegido"] = nombre
+
 
 def _mostrar_mensajes_capturados(texto: str) -> None:
     """Traduce los [AVISO]/[ERROR] que imprime el pipeline a alertas visuales de Streamlit."""
@@ -205,6 +241,35 @@ with tab_generar:
                 placeholder="Ej. Ref. 1234 - 500 unidades; Ref. 5678 - 300 unidades",
             )
             st.caption("Dato administrativo — no se imprime en la pieza.")
+
+        st.markdown("**Imagen de fondo**")
+        archivo_fondo_propio = st.file_uploader(
+            "Subir mi propia imagen de fondo (opcional, tiene prioridad sobre la galería)",
+            type=["png", "jpg", "jpeg", "webp"], key="fondo_propio",
+        )
+        fondos_disponibles = _listar_fondos()
+        fondo_elegido = st.session_state.get("fondo_elegido")
+        if fondo_elegido and not (BACKGROUNDS_DIR / fondo_elegido).is_file():
+            fondo_elegido = None
+        if archivo_fondo_propio is not None:
+            st.caption("Se usará la imagen que subiste.")
+        elif fondo_elegido:
+            miniatura_actual = _miniatura_fondo(BACKGROUNDS_DIR / fondo_elegido)
+            if miniatura_actual:
+                st.image(miniatura_actual, width=140)
+            st.caption(f"Fondo elegido: {fondo_elegido}")
+        else:
+            st.caption("Automático: se elige al azar uno acorde a la línea de negocio. Revisa la vista previa o elige uno de la galería.")
+        with st.expander(f"Elegir de la galería ({len(fondos_disponibles)} fondos)"):
+            st.button("Automático (según línea de negocio)", key="fondo_auto", on_click=_elegir_fondo, args=(None,))
+            columnas_fondos = st.columns(2)
+            for i, ruta_fondo in enumerate(fondos_disponibles):
+                with columnas_fondos[i % 2]:
+                    miniatura = _miniatura_fondo(ruta_fondo)
+                    if miniatura:
+                        st.image(miniatura, width="stretch")
+                    st.caption(ruta_fondo.stem.replace("_", " "))
+                    st.button("Usar este", key=f"fondo_{ruta_fondo.name}", on_click=_elegir_fondo, args=(ruta_fondo.name,))
 
         apoyos_texto = st.text_input(
             "Pata / Sponsors (texto de apoyo, si no subes logos abajo)",
@@ -317,6 +382,14 @@ with tab_generar:
                     "centro_operativo": centro_operativo,
                     "observaciones": observaciones,
                 }
+                if archivo_fondo_propio is not None:
+                    carpeta_fondos = UPLOADS_DIR / "fondos"
+                    carpeta_fondos.mkdir(parents=True, exist_ok=True)
+                    ruta_fondo_propio = carpeta_fondos / f"{int(time.time() * 1000)}_{archivo_fondo_propio.name}"
+                    ruta_fondo_propio.write_bytes(archivo_fondo_propio.getvalue())
+                    payload["background_file"] = str(ruta_fondo_propio)
+                elif fondo_elegido:
+                    payload["background_file"] = fondo_elegido
                 if sub_linea:
                     payload["sub_linea"] = sub_linea
                 if rutas_logos_aliados:
