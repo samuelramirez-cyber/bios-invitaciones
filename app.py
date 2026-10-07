@@ -284,9 +284,13 @@ with tab_generar:
 
             sub_linea = None
             if len(categoria) == 1 and categoria[0] in SUB_LINEAS_POR_CATEGORIA:
-                sub_linea = st.radio(
-                    f"Sub-línea de {categoria[0]}", SUB_LINEAS_POR_CATEGORIA[categoria[0]], key="sub_linea", horizontal=True,
+                opciones_sub = SUB_LINEAS_POR_CATEGORIA[categoria[0]]
+                sub_linea = st.multiselect(
+                    f"Sub-línea de {categoria[0]} (elige las que apliquen; cada una muestra su icono)",
+                    opciones_sub, default=opciones_sub[:1], key="sub_linea",
                 )
+                if not sub_linea:
+                    pendientes["marca"].append("elige al menos una sub-línea")
 
         # ---------------- Paso: tipo de evento ----------------
         with st.container(key="paso_tipo"):
@@ -295,7 +299,7 @@ with tab_generar:
             st.caption("Los eventos tipo Encuentro o Jornada no se gestionan por este formulario: van directo con los jefes de mercadeo.")
 
         # ---------------- Paso: datos del evento ----------------
-        titulo_evento = fecha = hora = lugar = ""
+        titulo_evento = antetitulo = fecha = hora = direccion = lugar = ""
         tipo_activacion = None
         descripcion_promocion = ""
         fecha_inicio_promo = fecha_fin_promo = None
@@ -304,11 +308,18 @@ with tab_generar:
         with st.container(key="paso_datos"):
             st.subheader(PASOS_TITULOS["datos"])
             if tipo_evento in TIPOS_CON_CHARLAS:
-                titulo_evento = st.text_input("Título del evento", key="titulo", placeholder="Ej. Manejo Reproductivo Bovino")
+                antetitulo = st.text_input(
+                    "Antetítulo (opcional)", key="antetitulo", placeholder="Ej. Ganadería de carne",
+                    help="Sale arriba del título, en mayúsculas y en el color de la línea de negocio.",
+                )
+                titulo_evento = st.text_input("Título del evento", key="titulo", placeholder="Ej. Un negocio rentable")
                 fecha = st.text_input("Fecha", key="fecha", placeholder="Ej. 24 de Septiembre de 2026")
                 hora = st.text_input("Hora", key="hora", placeholder="Ej. 3:00 p.m.")
-                lugar = st.text_input("Lugar", key="lugar", placeholder="Ej. Auditorio Central")
-                for etiqueta_o, valor_o in (("Título del evento", titulo_evento), ("Fecha", fecha), ("Lugar", lugar)):
+                direccion = st.text_input("Dirección", key="direccion", placeholder="Ej. Carrera 20 # 20-1 Barrio Boyacá")
+                lugar = st.text_input("Lugar", key="lugar", placeholder="Ej. Comité de Ganaderos de Tame")
+                for etiqueta_o, valor_o in (
+                    ("Antetítulo", antetitulo), ("Título del evento", titulo_evento), ("Fecha", fecha),
+                ):
                     _revisar_ortografia(etiqueta_o, valor_o, ort["datos"])
                 if not titulo_evento.strip():
                     pendientes["datos"].append("escribe el título del evento")
@@ -438,7 +449,7 @@ with tab_generar:
                     f"**{'Título' if es_charla else 'Promoción'}:** {titulo_evento if es_charla else descripcion_promocion}",
                 ]
                 if es_charla:
-                    resumen.append(f"**Fecha / hora / lugar:** {' · '.join(v for v in (fecha, hora, lugar) if v) or '—'}")
+                    resumen.append(f"**Fecha · hora · dirección · lugar:** {' · '.join(v for v in (fecha, hora, direccion, lugar) if v) or '—'}")
                     resumen.append(f"**Expositores:** {', '.join(p['name'] for p in ponentes) or 'ninguno'}")
                 else:
                     resumen.append(
@@ -479,7 +490,7 @@ with tab_generar:
                     if es_charla:
                         palabra_categoria, palabra_titulo = HEADLINE_POR_TIPO_EVENTO[tipo_evento]
                         tema_evento = titulo_evento
-                        fecha_texto = [v for v in (fecha, hora, lugar) if v]
+                        fecha_texto = [v for v in (fecha, hora, direccion.upper(), lugar) if v]
                     else:
                         palabra_categoria, palabra_titulo = HEADLINE_POR_ACTIVACION.get(
                             tipo_activacion, ("Actividad", "Promocional"),
@@ -508,8 +519,10 @@ with tab_generar:
                     }
                     if fondo_elegido:
                         payload["background_file"] = fondo_elegido
+                    if antetitulo.strip():
+                        payload["antetitulo"] = antetitulo.strip()
                     if sub_linea:
-                        payload["sub_linea"] = sub_linea
+                        payload["sub_linea"] = [x.lower() for x in sub_linea]
                     if patas:
                         payload["patas"] = patas
                     if tipo_evento == "Actividad Promocional":

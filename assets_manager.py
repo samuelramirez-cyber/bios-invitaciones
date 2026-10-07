@@ -22,6 +22,7 @@ BACKGROUNDS_DIR = ASSETS_DIR / "backgrounds"
 ICONS_DIR = ASSETS_DIR / "icons"
 SPEAKERS_DIR = ASSETS_DIR / "speakers"
 MAESTRIA_LOGOS_DIR = ASSETS_DIR / "Logos Maestria"
+CACHE_DIR = ASSETS_DIR / "_cache"
 
 # ---------------------------------------------------------------------------
 # Logos reales de marca: insignia "Maestria <Categoria>" e iconos de linea.
@@ -315,19 +316,63 @@ class AssetRepository:
     def get_maestria_logo(self, marca: Union[str, List[str], None], categoria: str) -> Optional[Path]:
         """
         PNG real de la insignia "Maestria <Categoria>" para `marca`, desde
-        assets/Logos Maestria/{Marca}_Maestria_{Sufijo}.png. Devuelve None
-        (sin excepcion) si la marca es ambigua (evento co-marca), la
-        categoria no tiene logo definido (ej. PDV, pendiente) o el archivo no
-        existe - quien llama sigue mostrando el badge de texto como fallback.
+        assets/Logos Maestria/{Marca}_Maestria_{Sufijo}.png. Para un evento
+        co-marca (Contegral + Finca) arma la version con ambos logos de marca
+        (ver _maestria_comarca). Devuelve None (sin excepcion) si la marca es
+        ambigua de otra forma, la categoria no tiene logo definido (ej. PDV,
+        pendiente) o el archivo no existe - quien llama sigue mostrando el
+        badge de texto como fallback.
         """
-        marca_unica = self._una_sola_marca(marca)
-        if not marca_unica:
-            return None
         sufijo = MAESTRIA_LOGO_SUFFIX.get(categoria)
         if not sufijo:
             return None
+        if _normalizar_marca_set(marca) == frozenset({"contegral", "finca"}):
+            return self._maestria_comarca(sufijo)
+        marca_unica = self._una_sola_marca(marca)
+        if not marca_unica:
+            return None
         candidata = MAESTRIA_LOGOS_DIR / f"{marca_unica.strip().capitalize()}_Maestria_{sufijo}.png"
         return candidata if candidata.is_file() else None
+
+    def _maestria_comarca(self, sufijo: str) -> Optional[Path]:
+        """
+        Logo "Maestria | Contegral  Finca": toma el emblema + separador del PNG
+        de Contegral y le suma, a la derecha, el logo de marca de cada PNG
+        (cada archivo es emblema + separador + logo de marca). El resultado se
+        cachea en assets/_cache/ y se regenera si cambia algun archivo fuente.
+        """
+        rutas = [MAESTRIA_LOGOS_DIR / f"{m}_Maestria_{sufijo}.png" for m in ("Contegral", "Finca")]
+        if not all(r.is_file() for r in rutas):
+            return None
+        destino = CACHE_DIR / f"Comarca_Maestria_{sufijo}.png"
+        if destino.is_file() and destino.stat().st_mtime >= max(r.stat().st_mtime for r in rutas):
+            return destino
+
+        def partir(ruta: Path):
+            im = Image.open(ruta).convert("RGBA")
+            ocupadas = [x for x in range(im.width) if im.getchannel("A").crop((x, 0, x + 1, im.height)).getbbox()]
+            inicio_marca = next(x for x in ocupadas if x > 410)
+            marca_img = im.crop((inicio_marca, 0, im.width, im.height))
+            marca_img = marca_img.crop(marca_img.getchannel("A").getbbox())
+            return im.crop((0, 0, inicio_marca - 10, im.height)), marca_img
+
+        try:
+            emblema, logo_contegral = partir(rutas[0])
+            _, logo_finca = partir(rutas[1])
+        except (OSError, StopIteration) as e:
+            print(f"[AVISO] No se pudo armar el logo Maestria de co-marca ({e}); se usa la insignia de texto.")
+            return None
+        separacion = 44
+        ancho = emblema.width + separacion + logo_contegral.width + separacion + logo_finca.width
+        lienzo = Image.new("RGBA", (ancho, emblema.height), (0, 0, 0, 0))
+        lienzo.alpha_composite(emblema, (0, 0))
+        x = emblema.width + separacion
+        for logo in (logo_contegral, logo_finca):
+            lienzo.alpha_composite(logo, (x, (emblema.height - logo.height) // 2))
+            x += logo.width + separacion
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        lienzo.save(destino)
+        return destino
 
     def get_category_icon(
         self, marca: Union[str, List[str], None], categoria: str, sub_linea: Optional[str] = None,
@@ -341,7 +386,9 @@ class AssetRepository:
         sub_linea - son ambiguas de proposito) o el archivo no existe.
         Gatos/Perros nunca se resuelven aqui: no son lineas de este negocio.
         """
-        marca_unica = self._una_sola_marca(marca)
+        # Los iconos de linea son el mismo dibujo para ambas marcas: en un evento
+        # co-marca se usa el de la primera marca listada.
+        marca_unica = self._una_sola_marca(marca) or (marca[0] if isinstance(marca, (list, tuple)) and marca else None)
         if not marca_unica:
             return None
         clave_sub = str(sub_linea).strip().lower() if sub_linea else None

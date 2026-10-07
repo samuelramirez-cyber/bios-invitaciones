@@ -6,8 +6,7 @@ Composicion por capas con Pillow. Sin dependencias externas pesadas.
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 
 from assets_manager import AssetRepository
 
@@ -120,22 +119,6 @@ class InvitationCanvasBuilder:
         overlay.putalpha(alpha_mask)
         merged = Image.alpha_composite(self.image.convert("RGBA"), overlay)
         self.image = merged.convert("RGB")
-        self.draw = ImageDraw.Draw(self.image)
-        return self
-
-    def apply_grain_texture(self, intensity: float = 0.05, opacity: float = 0.5) -> "InvitationCanvasBuilder":
-        """
-        Superpone un grano/textura sutil sobre toda la pieza - las plantillas
-        de referencia reales (assets/Templates/Invitaciones/) no tienen un
-        fondo oscuro completamente liso, tienen una textura tipo tela que le
-        da riqueza tactil. `intensity` controla la variacion del ruido (en
-        fraccion de 255); `opacity` cuanto se mezcla sobre la imagen final.
-        """
-        arr = np.array(self.image).astype(np.float32)
-        ruido = np.random.normal(0, 255 * intensity, arr.shape[:2]).astype(np.float32)
-        ruido = np.repeat(ruido[:, :, None], 3, axis=2)
-        resultado = np.clip(arr + ruido * opacity, 0, 255).astype(np.uint8)
-        self.image = Image.fromarray(resultado, mode="RGB")
         self.draw = ImageDraw.Draw(self.image)
         return self
 
@@ -253,16 +236,6 @@ class InvitationCanvasBuilder:
             y += alto_linea + spacing
         return y
 
-    def measure_wrapped_text(
-        self, text: str, font_path: str, font_size: int, max_width: int, spacing: int = 10,
-    ) -> Tuple[int, int, List[str]]:
-        """Ancho maximo de linea, alto total y lineas resultantes de envolver `text` a `max_width`."""
-        font = self._load_font(font_path, font_size)
-        lineas = self._wrap_lines(text, font, max_width)
-        altura = self._block_height(lineas, font, spacing)
-        ancho = max(self.draw.textbbox((0, 0), l, font=font)[2] for l in lineas)
-        return ancho, altura, lineas
-
     def measure_text_width(self, text: str, font_path: str, font_size: int) -> int:
         """Ancho en pixeles de `text` con la fuente/tamano dados (sin dibujar nada)."""
         font = self._load_font(font_path, font_size)
@@ -316,12 +289,13 @@ class InvitationCanvasBuilder:
         category_size: int = 78,
         headline_size: int = 116,
         date_size: int = 38,
-        icon_path: Optional[str] = None,
+        icon_paths: Optional[List[str]] = None,
         icon_size: int = 105,
         gap_title: int = 38,
         gap_date: int = 22,
-        max_width: int = 960,
-        date_max_width: int = 420,
+        max_width: int = 1000,
+        date_max_width: int = 400,
+        strong_max_width: int = 330,
         strong_items: int = 1,
         text_color: Tuple[int, int, int] = (255, 255, 255),
         muted_color: Tuple[int, int, int] = (214, 214, 214),
@@ -347,7 +321,7 @@ class InvitationCanvasBuilder:
             lineas_fecha: List[Tuple[str, ImageFont.ImageFont]] = []
             for i, item in enumerate(date_lines):
                 fuente = f_strong if i < strong_items else f_date
-                for sub in self._wrap_lines(str(item), fuente, date_max_width):
+                for sub in self._wrap_lines(str(item), fuente, strong_max_width if i < strong_items else date_max_width):
                     lineas_fecha.append((sub, fuente))
 
             def ancho(txt, fnt):
@@ -388,20 +362,22 @@ class InvitationCanvasBuilder:
         tiene_descendente = any(c in "gjpqyç" for c in headline_word.lower())
         title_bottom = head_baseline
 
-        if icon_path:
-            try:
-                with Image.open(icon_path) as ic:
-                    iw, ih = ic.size
-                lado = int(icon_size * escala)
-                factor = min(lado / iw, lado / ih)
-                w_icono = int(iw * factor)
-                y_icono = head_baseline + int(head_sz * (0.30 if tiene_descendente else 0.20))
-                res = self.paste_image(icon_path, x=title_right - w_icono / 2, y=y_icono,
-                                       max_size=(lado, lado), center_x=True)
+        if icon_paths:
+            lado = int(icon_size * escala)
+            y_icono = head_baseline + int(head_sz * (0.30 if tiene_descendente else 0.20))
+            x_der = title_right
+            for ruta_icono in reversed(icon_paths):
+                try:
+                    with Image.open(ruta_icono) as ic:
+                        iw, ih = ic.size
+                except (FileNotFoundError, OSError) as e:
+                    print(f"[AVISO] No se pudo abrir el icono '{ruta_icono}' ({e}); se omite.")
+                    continue
+                w_icono = int(iw * min(lado / iw, lado / ih))
+                res = self.paste_image(ruta_icono, x=x_der - w_icono, y=y_icono, max_size=(lado, lado))
                 if res:
-                    title_bottom = res[1] + res[3]
-            except (FileNotFoundError, OSError) as e:
-                print(f"[AVISO] No se pudo abrir el icono '{icon_path}' ({e}); se omite.")
+                    title_bottom = max(title_bottom, res[1] + res[3])
+                    x_der -= w_icono + int(16 * escala)
 
         # Fecha/lugar: alineada a la izquierda, primera linea a la altura de la palabra de categoria.
         pitch = int(date_sz * 1.22)
@@ -418,112 +394,123 @@ class InvitationCanvasBuilder:
         self.draw_vertical_divider(int(divider_x), top_y - 6, bottom + 6, accent, divider_w)
         return bottom + 6
 
-    def draw_bracket_frame(
-        self, x0: int, y0: int, x1: int, y1: int,
-        color: Tuple[int, int, int] = (255, 255, 255),
-        corner_len: int = 32, thickness: int = 3,
-    ) -> "InvitationCanvasBuilder":
-        """
-        Marco decorativo de solo-esquinas (corchetes en L), como el motivo
-        recurrente de las plantillas de referencia, en vez de un rectangulo completo.
-        """
-        corners = [
-            ((x0, y0), (1, 0), (0, 1)),
-            ((x1, y0), (-1, 0), (0, 1)),
-            ((x0, y1), (1, 0), (0, -1)),
-            ((x1, y1), (-1, 0), (0, -1)),
-        ]
-        for (cx, cy), (hx, hy), (vx, vy) in corners:
-            self.draw.line([(cx, cy), (cx + hx * corner_len, cy + hy * corner_len)], fill=color, width=thickness)
-            self.draw.line([(cx, cy), (cx + vx * corner_len, cy + vy * corner_len)], fill=color, width=thickness)
-        return self
-
     # ------------------------------------------------------------------
-    # Grid de ponentes
+    # Marco blanco abierto + titulo del evento
     # ------------------------------------------------------------------
 
-    def _circular_photo(self, photo_path: str, diameter: int) -> Optional[Image.Image]:
-        try:
-            foto = Image.open(photo_path).convert("RGB")
-        except (FileNotFoundError, OSError):
-            print(f"[AVISO] Foto de ponente no encontrada en '{photo_path}'; se omite.")
-            return None
+    def _componer_capa(self, capa: Image.Image, x: int, y: int) -> None:
+        """Compone una capa RGBA sobre la imagen actual en (x, y) (recortando lo que se salga del lienzo)."""
+        region = self.image.crop((x, y, x + capa.width, y + capa.height)).convert("RGBA")
+        region.alpha_composite(capa)
+        self.image.paste(region.convert("RGB"), (x, y))
+        self.draw = ImageDraw.Draw(self.image)
 
-        foto = ImageOps.fit(foto, (diameter, diameter), method=Image.LANCZOS)
-        mask = Image.new("L", (diameter, diameter), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, diameter, diameter), fill=255)
-        foto.putalpha(mask)
-        return foto
-
-    def render_speakers_grid(
+    def draw_content_frame(
         self,
-        speakers_list: List[Dict],
-        start_y: int,
-        name_font_path: str = str(DEFAULT_FONT_BOLD),
-        role_font_path: str = str(DEFAULT_FONT_REGULAR),
-        photo_diameter: int = 180,
-    ) -> int:
+        x0: int, y_top: int, x1: int, y_bottom: int,
+        gap_top: Optional[Tuple[int, int]] = None,
+        gap_bottom: Optional[Tuple[int, int]] = None,
+        color: Tuple[int, int, int] = (255, 255, 255),
+        radius: int = 22,
+        thickness: int = 3,
+    ) -> None:
         """
-        Dibuja de 1 a 5 ponentes en filas de hasta 2 columnas.
-        Cada elemento: {"name": str, "role": str, "photo_path": Optional[str]}.
-        Con foto: se recorta en circulo. Sin foto: solo texto (nombre en negrita, cargo regular).
-        Devuelve la coordenada Y siguiente al grid completo.
+        Marco de linea fina con esquinas redondeadas que envuelve titulo, foto y
+        ponencias (motivo de las piezas reales). `gap_top` / `gap_bottom` son
+        rangos X absolutos donde el borde superior/inferior queda abierto (el
+        titulo arriba, las tarjetas abajo). Dibujado a 3x para bordes suaves.
         """
-        speakers = speakers_list[:5]
-        if not speakers:
-            return start_y
+        w, h = int(x1 - x0), int(y_bottom - y_top)
+        S = 3
+        capa = Image.new("RGBA", (w * S, h * S), (0, 0, 0, 0))
+        dibujo = ImageDraw.Draw(capa)
+        dibujo.rounded_rectangle(
+            [0, 0, w * S - 1, h * S - 1], radius=radius * S, outline=tuple(color) + (255,), width=thickness * S,
+        )
+        alto_corte = (thickness + 3) * S
+        if gap_top:
+            dibujo.rectangle([(gap_top[0] - x0) * S, 0, (gap_top[1] - x0) * S, alto_corte], fill=(0, 0, 0, 0))
+        if gap_bottom:
+            dibujo.rectangle([(gap_bottom[0] - x0) * S, h * S - alto_corte, (gap_bottom[1] - x0) * S, h * S], fill=(0, 0, 0, 0))
+        self._componer_capa(capa.resize((w, h), Image.LANCZOS), int(x0), int(y_top))
 
-        columnas = 1 if len(speakers) == 1 else 2
-        filas = [speakers[i:i + columnas] for i in range(0, len(speakers), columnas)]
+    def draw_event_title(
+        self,
+        kicker: str,
+        title: str,
+        kicker_font: str,
+        title_font: str,
+        accent: Tuple[int, int, int],
+        top_y: int,
+        kicker_size: int = 50,
+        title_size: int = 52,
+        max_width: int = 800,
+        text_color: Tuple[int, int, int] = (255, 255, 255),
+    ) -> Dict[str, int]:
+        """
+        Titulo centrado del evento: antetitulo opcional (mayusculas, color de
+        acento) sobre el titulo en blanco (se ajusta a `max_width`). Devuelve
+        {"bottom", "frame_y" (Y donde pasa el borde superior del marco),
+        "gap_x0", "gap_x1" (rango X que el marco deja abierto)}.
+        """
+        cx = self.width / 2
+        lineas: List[Tuple[str, ImageFont.ImageFont, Tuple[int, int, int]]] = []
+        if kicker and kicker.strip():
+            tam = kicker_size
+            fuente = self._load_font(kicker_font, tam)
+            texto = kicker.strip().upper()
+            while self.draw.textbbox((0, 0), texto, font=fuente)[2] > max_width and tam > 24:
+                tam -= 2
+                fuente = self._load_font(kicker_font, tam)
+            lineas.append((texto, fuente, accent))
+        f_title = self._load_font(title_font, title_size)
+        n_kicker = len(lineas)
+        for sub in self._wrap_lines(title.strip(), f_title, max_width):
+            lineas.append((sub, f_title, text_color))
 
-        name_font = self._load_font(name_font_path, 32)
-        role_font = self._load_font(role_font_path, 26)
-
-        y = start_y
-
-        for fila in filas:
-            columnas_fila = len(fila)
-            col_width = self.width / columnas_fila
-            fila_top = y
-            fila_alturas = []
-
-            for idx, ponente in enumerate(fila):
-                col_center_x = col_width * idx + col_width / 2
-                cursor_y = fila_top
-
-                photo_path = ponente.get("photo_path")
-                foto = self._circular_photo(photo_path, photo_diameter) if photo_path else None
-                if foto:
-                    pos_x = int(col_center_x - photo_diameter / 2)
-                    self.image.paste(foto, (pos_x, int(cursor_y)), foto)
-                    cursor_y += photo_diameter + 16
-
-                nombre = ponente.get("name", "")
-                cargo = ponente.get("role", "")
-
-                bbox = self.draw.textbbox((0, 0), nombre, font=name_font)
-                self.draw.text(
-                    (col_center_x - (bbox[2] - bbox[0]) / 2, cursor_y),
-                    nombre, font=name_font, fill=(255, 255, 255),
-                )
-                cursor_y += (bbox[3] - bbox[1]) + 8
-
-                bbox2 = self.draw.textbbox((0, 0), cargo, font=role_font)
-                self.draw.text(
-                    (col_center_x - (bbox2[2] - bbox2[0]) / 2, cursor_y),
-                    cargo, font=role_font, fill=(220, 220, 220),
-                )
-                cursor_y += (bbox2[3] - bbox2[1])
-
-                fila_alturas.append(cursor_y - fila_top)
-
-            y = fila_top + max(fila_alturas) + 40
-
-        return y
+        y = top_y
+        ancho_max = 0
+        frame_y = top_y
+        for i, (texto, fuente, color) in enumerate(lineas):
+            cap = self.draw.textbbox((0, 0), "H", font=fuente)
+            cap_h = cap[3] - cap[1]
+            b = self.draw.textbbox((0, 0), texto, font=fuente)
+            ancho = b[2] - b[0]
+            ancho_max = max(ancho_max, ancho)
+            self.draw.text((cx - ancho / 2 - b[0], y - cap[1]), texto, font=fuente, fill=color)
+            if i == n_kicker:
+                frame_y = y + int(cap_h * 0.4)
+            y += int(cap_h * 1.55)
+            ultimo_cap = cap_h
+        bottom = y - int(ultimo_cap * 0.55)
+        return {
+            "bottom": int(bottom), "frame_y": int(frame_y),
+            "gap_x0": int(cx - ancho_max / 2 - 26), "gap_x1": int(cx + ancho_max / 2 + 26),
+        }
 
     # ------------------------------------------------------------------
-    # Tarjetas de ponentes (nombre, cargo, empresa, tema - con borde de acento)
+    # Tarjetas de ponentes (nombre, empresa, tema) - dos esquinas redondeadas
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _poligono_redondeado(x0, y0, x1, y1, r_tl, r_tr, r_br, r_bl, pasos: int = 24) -> List[Tuple[float, float]]:
+        """Contorno de un rectangulo con radio propio por esquina (0 = esquina recta)."""
+        import math
+        pts: List[Tuple[float, float]] = []
+
+        def arco(cx, cy, r, a0, a1):
+            if r <= 0:
+                pts.append((cx, cy))
+                return
+            for i in range(pasos + 1):
+                a = math.radians(a0 + (a1 - a0) * i / pasos)
+                pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+
+        arco(x0 + r_tl, y0 + r_tl, r_tl, 180, 270)
+        arco(x1 - r_tr, y0 + r_tr, r_tr, 270, 360)
+        arco(x1 - r_br, y1 - r_br, r_br, 0, 90)
+        arco(x0 + r_bl, y1 - r_bl, r_bl, 90, 180)
+        return pts
 
     def draw_speaker_card(
         self,
@@ -536,92 +523,66 @@ class InvitationCanvasBuilder:
         role_font_path: str = str(DEFAULT_FONT_REGULAR),
         topic_font_path: str = str(DEFAULT_FONT_BOLD),
         bg_color: Tuple[int, int, int] = (18, 18, 18),
-        bg_opacity: float = 0.55,
-        padding: int = 16,
-        corner_radius: int = 14,
-        photo_size: int = 64,
+        bg_opacity: float = 0.62,
+        padding: int = 22,
+        r_small: int = 14,
+        r_big: int = 48,
+        min_height: int = 0,
+        measure_only: bool = False,
     ) -> int:
         """
-        Tarjeta con fondo oscuro semitransparente y borde de color de acento:
-        [Foto opcional] Nombre (negrita) -> Cargo, Empresa (regular) -> linea
-        divisoria -> Tema (negrita, color de acento). La foto solo se dibuja
-        si `ponente["photo_path"]` es una foto real (has_fallback_avatar es
-        False) - con avatar por defecto, la tarjeta queda solo texto, igual
-        que en las plantillas de referencia que no traen foto.
-        Devuelve el Y inferior de la tarjeta.
+        Tarjeta como en las piezas reales: fondo oscuro translucido, borde de
+        acento y SOLO dos esquinas redondeadas en diagonal (superior izquierda
+        pequena, inferior derecha grande). Contenido: NOMBRE en mayusculas
+        (negrita), cargo/empresa (regular), linea de acento y TEMA en
+        mayusculas (negrita, color de acento). Devuelve el Y inferior.
         """
-        name_font = self._load_font(name_font_path, 28)
+        name_font = self._load_font(name_font_path, 25)
         role_font = self._load_font(role_font_path, 21)
-        topic_font = self._load_font(topic_font_path, 22)
+        topic_font = self._load_font(topic_font_path, 21)
+        content_width = width - 2 * padding
 
-        photo_path = ponente.get("photo_path")
-        mostrar_foto = bool(photo_path) and not ponente.get("has_fallback_avatar", True)
-        texto_x = x + padding + (photo_size + 14 if mostrar_foto else 0)
-        content_width = width - 2 * padding - (photo_size + 14 if mostrar_foto else 0)
-
-        nombre_lineas = self._wrap_lines(ponente.get("name", ""), name_font, content_width)
-
+        nombre_lineas = self._wrap_lines(ponente.get("name", "").upper(), name_font, content_width)
         rol_texto = ponente.get("role", "")
         empresa_texto = ponente.get("empresa") or ponente.get("company") or ""
         rol_lineas = self._wrap_lines(rol_texto, role_font, content_width) if rol_texto else []
         empresa_lineas = self._wrap_lines(empresa_texto, role_font, content_width) if empresa_texto else []
-
         tema_texto = ponente.get("tema") or ponente.get("topic") or ""
-        tema_lineas = self._wrap_lines(tema_texto.upper(), topic_font, content_width) if tema_texto else []
+        tema_lineas = self._wrap_lines(tema_texto.upper(), topic_font, content_width - 10) if tema_texto else []
 
-        # --- Pasada de medicion (no pinta pixeles): calcula la altura total de la tarjeta ---
-        cursor_y = y + padding
-        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, 28, texto_x, cursor_y, (255, 255, 255), "left", 4, measure_only=True)
+        texto_x = x + padding
+        cursor_y = y + padding - 4
+        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, 25, texto_x, cursor_y, (255, 255, 255), "left", 4, measure_only=True)
         if rol_lineas:
             cursor_y = self.draw_text_block(rol_lineas, role_font_path, 21, texto_x, cursor_y + 2, (215, 215, 215), "left", 3, measure_only=True)
         if empresa_lineas:
             cursor_y = self.draw_text_block(empresa_lineas, role_font_path, 21, texto_x, cursor_y, (255, 255, 255), "left", 3, measure_only=True)
         if tema_lineas:
-            divider_y = cursor_y + 8
-            cursor_y = self.draw_text_block(tema_lineas, topic_font_path, 22, texto_x, divider_y + 10, accent_color, "left", 4, measure_only=True)
+            cursor_y = self.draw_text_block(tema_lineas, topic_font_path, 21, texto_x, cursor_y + 8 + 12, accent_color, "left", 7, measure_only=True)
+        card_bottom = max(cursor_y + padding + 6, y + min_height)
+        if measure_only:
+            return int(card_bottom)
 
-        contenido_bottom = cursor_y + padding
-        card_bottom = max(contenido_bottom, y + padding + photo_size + padding) if mostrar_foto else contenido_bottom
+        S = 3
+        w, h = int(width), int(card_bottom - y)
+        capa = Image.new("RGBA", (w * S, h * S), (0, 0, 0, 0))
+        poligono = self._poligono_redondeado(1, 1, w * S - 2, h * S - 2, r_small * S, 0, r_big * S, 0)
+        d = ImageDraw.Draw(capa)
+        d.polygon(poligono, fill=tuple(bg_color) + (int(255 * bg_opacity),))
+        d.line(poligono + [poligono[0]], fill=tuple(accent_color) + (255,), width=2 * S, joint="curve")
+        self._componer_capa(capa.resize((w, h), Image.LANCZOS), int(x), int(y))
 
-        # Fondo translucido + borde, dibujados DESPUES de medir el contenido (altura ya conocida)
-        overlay = Image.new("RGBA", self.image.size, (0, 0, 0, 0))
-        overlay_draw = ImageDraw.Draw(overlay)
-        overlay_draw.rounded_rectangle(
-            [x, y, x + width, card_bottom],
-            radius=corner_radius,
-            fill=bg_color + (int(255 * bg_opacity),),
-        )
-        self.image = Image.alpha_composite(self.image.convert("RGBA"), overlay).convert("RGB")
-        self.draw = ImageDraw.Draw(self.image)
-        self.draw.rounded_rectangle([x, y, x + width, card_bottom], radius=corner_radius, outline=accent_color, width=2)
-
-        if mostrar_foto:
-            try:
-                foto = Image.open(photo_path).convert("RGB")
-                foto = ImageOps.fit(foto, (photo_size, photo_size), method=Image.LANCZOS)
-                # Blanco y negro, sin borde - asi se ven las fotos de ponente en
-                # las plantillas de referencia reales (ver assets/Templates/Invitaciones/).
-                foto = ImageOps.grayscale(foto).convert("RGB")
-                self.image.paste(foto, (x + padding, y + padding))
-            except (FileNotFoundError, OSError) as e:
-                print(f"[AVISO] Foto de ponente '{photo_path}' no se pudo abrir ({e}); tarjeta sin foto.")
-
-        # --- Pasada real: ahora si se pinta el texto, encima del fondo ya compuesto ---
-        cursor_y = y + padding
-        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, 28, texto_x, cursor_y, (255, 255, 255), "left", 4)
+        cursor_y = y + padding - 4
+        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, 25, texto_x, cursor_y, (255, 255, 255), "left", 4)
         if rol_lineas:
             cursor_y = self.draw_text_block(rol_lineas, role_font_path, 21, texto_x, cursor_y + 2, (215, 215, 215), "left", 3)
         if empresa_lineas:
             cursor_y = self.draw_text_block(empresa_lineas, role_font_path, 21, texto_x, cursor_y, (255, 255, 255), "left", 3)
         if tema_lineas:
-            divider_y = cursor_y + 8
-            self.draw.line(
-                [(texto_x, divider_y), (texto_x + min(180, content_width), divider_y)],
-                fill=accent_color, width=2,
-            )
-            self.draw_text_block(tema_lineas, topic_font_path, 22, texto_x, divider_y + 10, accent_color, "left", 4)
-
-        return card_bottom
+            linea_y = cursor_y + 8
+            self.draw.line([(x + 1, linea_y), (x + width - 64, linea_y)], fill=tuple(accent_color), width=2)
+            self.draw_text_block(tema_lineas, topic_font_path, 21, texto_x, linea_y + 12, accent_color, "left", 7)
+        return int(card_bottom)
 
     def render_speaker_cards(
         self,
@@ -630,36 +591,51 @@ class InvitationCanvasBuilder:
         accent_color: Tuple[int, int, int],
         columns: int = 2,
         margin: int = 40,
-        gap: int = 16,
+        gap: int = 26,
         name_font_path: str = str(DEFAULT_FONT_BOLD),
         role_font_path: str = str(DEFAULT_FONT_REGULAR),
         topic_font_path: str = str(DEFAULT_FONT_BOLD),
-    ) -> int:
+        measure_only: bool = False,
+    ) -> Dict[str, int]:
         """
-        Dispone hasta 5 ponentes en tarjetas con borde de acento (ver draw_speaker_card),
-        en filas de hasta `columns` columnas. Devuelve el Y siguiente al bloque completo.
+        Dispone hasta 5 ponentes en filas de hasta `columns` tarjetas del mismo
+        alto por fila, dentro de [margin, ancho - margin]. Con `measure_only`
+        solo calcula. Devuelve {"bottom", "last_row_top", "last_row_bottom",
+        "last_row_x0", "last_row_x1"} (la ultima fila sirve para abrir el marco).
         """
         speakers = speakers_list[:5]
         if not speakers:
-            return start_y
+            return {"bottom": start_y, "last_row_top": start_y, "last_row_bottom": start_y,
+                    "last_row_x0": margin, "last_row_x1": self.width - margin}
 
         cols = 1 if len(speakers) == 1 else columns
         card_width = (self.width - 2 * margin - gap * (cols - 1)) / cols
+        if cols == 1:
+            card_width = min(card_width, 440)
+            margin = (self.width - card_width) / 2
+        fuentes = dict(name_font_path=name_font_path, role_font_path=role_font_path, topic_font_path=topic_font_path)
 
         y = start_y
+        info = {}
         for i in range(0, len(speakers), cols):
             fila = speakers[i:i + cols]
-            fila_bottom = y
-            for idx, ponente in enumerate(fila):
-                x = int(margin + idx * (card_width + gap))
-                bottom = self.draw_speaker_card(
-                    ponente, x, int(y), int(card_width), accent_color,
-                    name_font_path=name_font_path, role_font_path=role_font_path, topic_font_path=topic_font_path,
-                )
-                fila_bottom = max(fila_bottom, bottom)
-            y = fila_bottom + gap
-
-        return y
+            alto_fila = max(
+                self.draw_speaker_card(p, 0, int(y), int(card_width), accent_color, measure_only=True, **fuentes) - int(y)
+                for p in fila
+            )
+            if not measure_only:
+                for idx, ponente in enumerate(fila):
+                    self.draw_speaker_card(
+                        ponente, int(margin + idx * (card_width + gap)), int(y), int(card_width), accent_color,
+                        min_height=alto_fila, **fuentes,
+                    )
+            info = {
+                "last_row_top": int(y), "last_row_bottom": int(y + alto_fila),
+                "last_row_x0": int(margin), "last_row_x1": int(margin + len(fila) * card_width + (len(fila) - 1) * gap),
+            }
+            y += alto_fila + gap
+        info["bottom"] = int(y - gap)
+        return info
 
     # ------------------------------------------------------------------
     # Insignia "Maestria [Categoria]"
@@ -684,6 +660,21 @@ class InvitationCanvasBuilder:
     # ------------------------------------------------------------------
     # Fila de logos de marcas aliadas (patrocinadores multiples)
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _recortar_margenes(img: Image.Image, tolerancia: int = 14) -> Image.Image:
+        """Quita el borde vacio de un logo (transparente, o blanco en JPG) para que el espaciado de la pata sea parejo."""
+        rgba = img.convert("RGBA")
+        caja = rgba.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
+        if caja:
+            rgba = rgba.crop(caja)
+        if rgba.getchannel("A").getextrema()[0] > 250:
+            fondo = Image.new("RGB", rgba.size, (255, 255, 255))
+            dif = ImageChops.difference(rgba.convert("RGB"), fondo).convert("L").point(lambda v: 255 if v > tolerancia else 0)
+            caja = dif.getbbox()
+            if caja:
+                rgba = rgba.crop(caja)
+        return rgba
 
     def render_sponsor_pata(
         self,
@@ -711,7 +702,7 @@ class InvitationCanvasBuilder:
             logos = []
             for ruta in g.get("logos", []):
                 try:
-                    logos.append(Image.open(ruta).convert("RGBA"))
+                    logos.append(self._recortar_margenes(Image.open(ruta)))
                 except (FileNotFoundError, OSError) as e:
                     print(f"[AVISO] No se pudo abrir el logo '{ruta}' ({e}); se omite.")
             if logos:

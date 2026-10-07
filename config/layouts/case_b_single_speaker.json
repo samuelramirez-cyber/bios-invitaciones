@@ -22,17 +22,10 @@
       "top_y": 185,
       "category_size": 78,
       "headline_size": 116,
-      "date_size": 38,
+      "date_size": 36,
       "icon_size": 105
     },
-    "subtitle": {
-      "y": 470,
-      "max_width": 900,
-      "font_size": 40,
-      "frame_margin": 40
-    },
     "speaker_cards": {
-      "start_y": 820,
       "columns": 1
     },
     "maestria_badge": {
@@ -40,6 +33,16 @@
     },
     "sponsor": {
       "y": 1440
+    },
+    "frame": {
+      "side_margin": 92,
+      "gap_after_lockup": 56,
+      "cards_inset": 90,
+      "cards_bottom": 1272,
+      "empty_bottom": 1170,
+      "kicker_size": 50,
+      "title_size": 52,
+      "cards_gap": 50
     }
   }
 }

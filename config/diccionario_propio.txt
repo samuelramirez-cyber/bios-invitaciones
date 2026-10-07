@@ -31,6 +31,18 @@ lechones
 destete
 ponedoras
 
+suplementación
+suplementar
+silvopastoril
+silvopastoriles
+lechería
+tilapia
+zootecnista
+agroinsumos
+agronegocio
+desparasitación
+mastitis
+
 # Municipios y centros operativos
 envigado
 itagüí

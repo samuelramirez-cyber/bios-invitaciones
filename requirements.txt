@@ -3,5 +3,4 @@ Flask
 requests
 streamlit
 pyngrok
-numpy
 spylls

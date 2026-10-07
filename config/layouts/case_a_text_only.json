@@ -22,20 +22,24 @@
       "top_y": 185,
       "category_size": 78,
       "headline_size": 116,
-      "date_size": 38,
+      "date_size": 36,
       "icon_size": 105
-    },
-    "subtitle": {
-      "y": 500,
-      "max_width": 900,
-      "font_size": 44,
-      "frame_margin": 40
     },
     "maestria_badge": {
       "y": 1250
     },
     "sponsor": {
       "y": 1440
+    },
+    "frame": {
+      "side_margin": 92,
+      "gap_after_lockup": 56,
+      "cards_inset": 90,
+      "cards_bottom": 1272,
+      "empty_bottom": 1170,
+      "kicker_size": 50,
+      "title_size": 52,
+      "cards_gap": 50
     }
   }
 }

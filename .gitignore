@@ -14,3 +14,6 @@ assets/backgrounds/
 # Local
 .env
 *.log
+
+# Cache generada (logos compuestos)
+assets/_cache/
