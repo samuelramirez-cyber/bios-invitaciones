@@ -685,78 +685,123 @@ class InvitationCanvasBuilder:
     # Fila de logos de marcas aliadas (patrocinadores multiples)
     # ------------------------------------------------------------------
 
-    def render_sponsor_logos_row(
+    def render_sponsor_pata(
         self,
-        logo_paths: List[str],
+        groups: List[Dict],
         y_position: int,
-        max_logo_height: int = 76,
-        gap: int = 22,
-        box_fill: Tuple[int, int, int] = (245, 245, 245),
-        box_padding: int = 26,
-        corner_radius: int = 16,
-        label: Optional[str] = "Apoyan",
-        label_color: Tuple[int, int, int] = (60, 60, 60),
-        label_font_path: str = str(DEFAULT_FONT_BLACK),
-        label_font_size: int = 30,
+        frame_color: Tuple[int, int, int],
+        label_color: Tuple[int, int, int],
+        header_logo: Optional[str] = None,
+        label_font_path: str = str(DEFAULT_FONT_BOLD),
+        label_size: int = 52,
+        max_logo_height: int = 104,
+        box_fill: Tuple[int, int, int] = (247, 247, 247),
+        max_width: int = 940,
     ) -> int:
         """
-        Pega varios logos de marcas aliadas dentro de una caja solida clara
-        con esquinas redondeadas - la caja "Apoyan: <logos>" real de
-        assets/Templates/Invitaciones/ (no un marco transparente). Con
-        `label` (por defecto "Apoyan") lo dibuja a la izquierda, dentro de
-        la misma caja. Un logo individual que no se pueda abrir se omite (no
-        detiene el resto). Devuelve la Y siguiente al bloque. Si `logo_paths`
-        esta vacio (tras omitir invalidos), no dibuja nada y devuelve
-        `y_position` sin cambios.
+        Pata de patrocinadores como en las piezas reales (assets/Templates/Patas/):
+        logo de Grupo Bios arriba rompiendo un marco redondeado (color de la
+        linea) y, debajo, una caja clara con uno o mas grupos "Etiqueta | logos"
+        (ej. "Apoya | logo", "Invita | logo"). `groups` = [{"label": "Invita",
+        "logos": [rutas...]}]; la etiqueta se pluraliza sola ("Invitan") si
+        el grupo trae mas de un logo. Devuelve la Y inferior de la pata.
         """
-        logos = []
-        for ruta in logo_paths:
-            try:
-                img = Image.open(ruta).convert("RGBA")
-            except (FileNotFoundError, OSError):
-                print(f"[AVISO] Logo aliado no encontrado o invalido en '{ruta}'; se omite.")
-                continue
-            escala = max_logo_height / img.height
-            img = img.resize((max(1, int(img.width * escala)), max_logo_height))
-            logos.append(img)
-
-        if not logos:
+        grupos = []
+        for g in groups:
+            logos = []
+            for ruta in g.get("logos", []):
+                try:
+                    logos.append(Image.open(ruta).convert("RGBA"))
+                except (FileNotFoundError, OSError) as e:
+                    print(f"[AVISO] No se pudo abrir el logo '{ruta}' ({e}); se omite.")
+            if logos:
+                etiqueta = str(g.get("label", "Apoya"))
+                grupos.append((etiqueta + "n" if len(logos) > 1 and not etiqueta.endswith("n") else etiqueta, logos))
+        if not grupos:
             return y_position
 
-        label_font = self._load_font(label_font_path, label_font_size) if label else None
-        label_ancho = 0
-        if label and label_font:
-            bbox_label = self.draw.textbbox((0, 0), label, font=label_font)
-            label_ancho = (bbox_label[2] - bbox_label[0]) + 22
+        encabezado = None
+        if header_logo:
+            try:
+                encabezado = Image.open(header_logo).convert("RGBA")
+            except (FileNotFoundError, OSError) as e:
+                print(f"[AVISO] No se pudo abrir el logo de encabezado '{header_logo}' ({e}); pata sin encabezado.")
 
-        ancho_logos = sum(l.width for l in logos) + gap * (len(logos) - 1)
-        ancho_contenido = label_ancho + ancho_logos
-        box_w = ancho_contenido + 2 * box_padding
-        box_h = max_logo_height + 2 * box_padding
+        pad_x, gap_logo, gap_grupo, sep_gap = 36, 30, 46, 22
+        f = 1.0
+        while True:
+            alto_logo = int(max_logo_height * f)
+            font_label = self._load_font(label_font_path, int(label_size * f))
+            escalados, anchos_grupo = [], []
+            for etiqueta, logos in grupos:
+                fila = []
+                for im in logos:
+                    k = min(alto_logo / im.height, (alto_logo * 2.4) / im.width)
+                    fila.append(im.resize((max(1, int(im.width * k)), max(1, int(im.height * k))), Image.LANCZOS))
+                escalados.append(fila)
+                bl = self.draw.textbbox((0, 0), etiqueta, font=font_label)
+                anchos_grupo.append((bl[2] - bl[0]) + sep_gap * 2 + 2 + sum(i.width for i in fila) + gap_logo * (len(fila) - 1))
+            box_w = sum(anchos_grupo) + gap_grupo * (len(grupos) - 1) + 2 * pad_x
+            if box_w <= max_width or f <= 0.55:
+                break
+            f -= 0.05
+
+        pad_y = int(28 * f)
+        box_h = alto_logo + 2 * pad_y
+        if encabezado:
+            kh = (70 * f) / encabezado.height
+            encabezado = encabezado.resize((int(encabezado.width * kh), int(encabezado.height * kh)), Image.LANCZOS)
+        header_h = encabezado.height if encabezado else 0
+        header_w = encabezado.width if encabezado else 0
+        gap_header = 16 if encabezado else 0
+
         box_x0 = int((self.width - box_w) / 2)
-        box_y0 = int(y_position)
-        box_x1 = box_x0 + box_w
-        box_y1 = box_y0 + box_h
+        box_y0 = int(y_position + header_h + gap_header)
+        box_cy = box_y0 + box_h / 2
 
-        self.draw.rounded_rectangle([box_x0, box_y0, box_x1, box_y1], radius=corner_radius, fill=box_fill)
+        # Marco: rectangulo redondeado dibujado a 3x (bordes suaves). Arriba queda
+        # abierto bajo el logo de encabezado; abajo lo tapa la caja de contenido.
+        marco_w = int(min(max(box_w + 300, header_w + 280), self.width - 80))
+        marco_x0 = int((self.width - marco_w) / 2)
+        marco_top = int(y_position + header_h / 2) if encabezado else int(box_y0 - 20)
+        marco_h = int(box_cy - marco_top)
+        S3 = 3
+        capa = Image.new("RGBA", (marco_w * S3, marco_h * S3), (0, 0, 0, 0))
+        ImageDraw.Draw(capa).rounded_rectangle(
+            [0, 0, marco_w * S3 - 1, marco_h * S3 - 1], radius=34 * S3,
+            outline=tuple(frame_color) + (255,), width=3 * S3,
+        )
+        if encabezado:
+            hueco = (header_w + 36) * S3
+            ImageDraw.Draw(capa).rectangle(
+                [(marco_w * S3 - hueco) // 2, 0, (marco_w * S3 + hueco) // 2, 6 * S3 + 2], fill=(0, 0, 0, 0),
+            )
+        capa = capa.resize((marco_w, marco_h), Image.LANCZOS)
+        self.image.paste(capa, (marco_x0, marco_top), capa)
 
-        cursor_x = box_x0 + box_padding
-        if label and label_font:
-            bbox_label = self.draw.textbbox((0, 0), label, font=label_font)
-            alto_label = bbox_label[3] - bbox_label[1]
-            y_label = box_y0 + box_h / 2 - alto_label / 2 - bbox_label[1]
-            self.draw.text((cursor_x, y_label), label, font=label_font, fill=label_color)
-            cursor_x += label_ancho
+        if encabezado:
+            self.image.paste(encabezado, (int((self.width - header_w) / 2), int(y_position)), encabezado)
 
-        for logo in logos:
-            self.image.paste(logo, (int(cursor_x), int(box_y0 + box_padding)), logo)
-            cursor_x += logo.width + gap
+        self.draw = ImageDraw.Draw(self.image)
+        self.draw.rounded_rectangle(
+            [box_x0, box_y0, box_x0 + box_w, box_y0 + box_h], radius=int(20 * f), fill=tuple(box_fill),
+        )
 
-        return int(box_y1)
+        x = box_x0 + pad_x
+        hb = self.draw.textbbox((0, 0), "H", font=font_label)
+        for (etiqueta, _), fila in zip(grupos, escalados):
+            bl = self.draw.textbbox((0, 0), etiqueta, font=font_label)
+            y_texto = box_cy - (hb[3] - hb[1]) / 2 - hb[1]
+            self.draw.text((x - bl[0], y_texto), etiqueta, font=font_label, fill=tuple(label_color))
+            x += (bl[2] - bl[0]) + sep_gap
+            self.draw.line([(x, box_cy - alto_logo * 0.34), (x, box_cy + alto_logo * 0.34)], fill=tuple(label_color), width=2)
+            x += 2 + sep_gap
+            for im in fila:
+                self.image.paste(im, (int(x), int(box_cy - im.height / 2)), im)
+                x += im.width + gap_logo
+            x += gap_grupo - gap_logo
 
-    # ------------------------------------------------------------------
-    # Fallback de patrocinador
-    # ------------------------------------------------------------------
+        return int(box_y0 + box_h)
 
     def render_sponsor_fallback(
         self,

@@ -106,7 +106,7 @@ CASOS = {
         "ponentes": [],
         "apoyos_texto": "",
     },
-    6: {  # fila de logos aliados reales (render_sponsor_logos_row) en vez de texto/logo unico
+    6: {  # pata con grupos Apoya + Invita (render_sponsor_pata)
         "marca": "Contegral",
         "categoria": "porcicola",
         "palabra_categoria": "Charla",
@@ -115,9 +115,9 @@ CASOS = {
         "fecha_texto": ["5 de Noviembre", "de 2026", "2:00 p.m.", "Centro de Convenciones"],
         "tema_evento": "Bioseguridad y Produccion Porcicola",
         "ponentes": [],
-        "logos_aliados": [
-            str(BASE_DIR / "assets" / "icons" / "Contegral" / "Contegral_Porcicultura.png"),
-            str(BASE_DIR / "assets" / "icons" / "Finca" / "Finca_Porcicultura.png"),
+        "patas": [
+            {"tipo": "Apoya", "logos": [str(BASE_DIR / "assets" / "icons" / "Contegral" / "Contegral_Porcicultura.png")]},
+            {"tipo": "Invita", "logos": [str(BASE_DIR / "assets" / "icons" / "Finca" / "Finca_Porcicultura.png")]},
         ],
     },
     7: {  # avicola con sub_linea (icono de linea real, Engorde) - no probado antes

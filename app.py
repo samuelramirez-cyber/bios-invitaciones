@@ -299,9 +299,12 @@ with tab_generar:
             "Pata / Sponsors (texto de apoyo, si no subes logos abajo)",
             key="apoyos_texto", placeholder="Ej. Con el apoyo de Contegral",
         )
-        archivos_logos_aliados = st.file_uploader(
-            "Logos de marcas aliadas (patrocinadores) para la pata - opcional, tiene prioridad sobre el texto de arriba",
-            type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_aliados",
+        st.caption("Pata: sube los logos de las marcas aliadas (tienen prioridad sobre el texto de arriba).")
+        archivos_apoyan = st.file_uploader(
+            "Logos que APOYAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_apoyan",
+        )
+        archivos_invitan = st.file_uploader(
+            "Logos que INVITAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_invitan",
         )
 
         ponentes: List[Dict[str, Any]] = []
@@ -352,14 +355,18 @@ with tab_generar:
             else:
                 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-                rutas_logos_aliados = []
-                if archivos_logos_aliados:
+                patas = []
+                for tipo_pata, archivos_pata in (("Apoya", archivos_apoyan), ("Invita", archivos_invitan)):
+                    if not archivos_pata:
+                        continue
                     carpeta_aliados = UPLOADS_DIR / "aliados"
                     carpeta_aliados.mkdir(parents=True, exist_ok=True)
-                    for subido in archivos_logos_aliados:
-                        ruta_logo = carpeta_aliados / subido.name
+                    rutas = []
+                    for subido in archivos_pata:
+                        ruta_logo = carpeta_aliados / f"{tipo_pata.lower()}_{subido.name}"
                         ruta_logo.write_bytes(subido.getvalue())
-                        rutas_logos_aliados.append(str(ruta_logo))
+                        rutas.append(str(ruta_logo))
+                    patas.append({"tipo": tipo_pata, "logos": rutas})
 
                 # Resolver la foto subida de cada ponente (si hay) a una ruta real en disco.
                 carpeta_fotos_ponentes = UPLOADS_DIR / "ponentes"
@@ -416,8 +423,8 @@ with tab_generar:
                     payload["background_file"] = fondo_elegido
                 if sub_linea:
                     payload["sub_linea"] = sub_linea
-                if rutas_logos_aliados:
-                    payload["logos_aliados"] = rutas_logos_aliados
+                if patas:
+                    payload["patas"] = patas
                 if tipo_evento == "Actividad Promocional":
                     payload["tipo_activacion"] = tipo_activacion
                     payload["unidades_disponibles"] = unidades_disponibles

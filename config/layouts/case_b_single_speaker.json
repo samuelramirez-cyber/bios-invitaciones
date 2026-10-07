@@ -32,14 +32,14 @@
       "frame_margin": 40
     },
     "speaker_cards": {
-      "start_y": 1380,
+      "start_y": 820,
       "columns": 1
     },
     "maestria_badge": {
-      "y": 1590
+      "y": 1250
     },
     "sponsor": {
-      "y": 1760
+      "y": 1440
     }
   }
 }

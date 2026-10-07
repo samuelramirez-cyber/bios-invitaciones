@@ -20,7 +20,7 @@ from typing import List, Optional, Union
 
 from assets_manager import get_brand_font_name
 from canvas_engine import InvitationCanvasBuilder
-from layout_engine import LayoutConfigError, LayoutDecisionEngine
+from layout_engine import CATEGORY_COLORS, LayoutConfigError, LayoutDecisionEngine
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_PAYLOAD_PATH = BASE_DIR / "payload.json"
@@ -150,41 +150,49 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
             name_font_path=font_bold, role_font_path=font_regular, topic_font_path=font_bold,
         )
 
-    # --- Insignia "Maestria <Categoria>" (el payload puede sobreescribir la etiqueta derivada) ---
+    # --- Insignia Maestria: el logo real (assets/Logos Maestria/) va grande y
+    # reemplaza al texto, como en las piezas reales. Sin logo para esta
+    # marca+categoria (co-marca, categoria sin logo) se dibuja la insignia de
+    # texto; el payload puede sobreescribir su etiqueta. ---
     maestria_box = boxes["maestria_badge"]
-    maestria_label = payload.get("maestria_label") or decision["maestria_label"]
-    y = builder.draw_maestria_badge(
-        maestria_label, max(y + 30, maestria_box["y"]), accent,
-        title_font_path=font_black, category_font_path=font_bold, tagline_font_path=font_regular,
-    )
-
-    # --- Logo real de la insignia (assets/Logos Maestria/), si existe para esta
-    # marca+categoria (marca co-marca o categoria sin logo definido -> None,
-    # el texto de arriba ya cubre ese caso) ---
+    badge_y = max(y + 30, maestria_box["y"])
     logo_maestria = builder.asset_repo.get_maestria_logo(decision["marca"], decision["categoria"])
+    resultado_logo = None
     if logo_maestria:
         resultado_logo = builder.paste_image(
-            logo_maestria, x=builder.width / 2, y=y + 10, max_size=(220, 100), center_x=True,
+            logo_maestria, x=builder.width / 2, y=badge_y, max_size=(640, 170), center_x=True,
         )
-        if resultado_logo:
-            y = resultado_logo[1] + resultado_logo[3]
+    if resultado_logo:
+        y = resultado_logo[1] + resultado_logo[3]
+    else:
+        maestria_label = payload.get("maestria_label") or decision["maestria_label"]
+        y = builder.draw_maestria_badge(
+            maestria_label, badge_y, accent,
+            title_font_path=font_black, category_font_path=font_bold, tagline_font_path=font_regular,
+        )
 
-    # --- Logos / fallback de patrocinador ---
-    # Prioridad: logos_aliados (varios logos subidos, fila completa) ->
-    # apoyo_logo explicito -> apoyos_texto explicito (asi el payload sigue
-    # mandando, como en el Caso 4 de test_all_cases.py que valida a proposito
-    # el fallback a texto) -> logo de marca via AssetRepository, solo si el
-    # payload no especifico ninguno de los anteriores.
+    # --- Pata de patrocinadores ---
+    # Prioridad: `patas` (grupos "Apoya"/"Invita" con sus logos) -> apoyo_logo /
+    # apoyos_texto explicitos (fallback de texto, validado por el Caso 4 de
+    # test_all_cases.py). Sin ninguno de los anteriores no se dibuja pata.
     sponsor_box = boxes["sponsor"]
-    logos_aliados = payload.get("logos_aliados")
-    if logos_aliados:
-        builder.render_sponsor_logos_row(logos_aliados, y_position=max(y + 20, sponsor_box["y"]))
+    grupos_pata = [
+        {"label": g.get("tipo", "Apoya"), "logos": g.get("logos", [])} for g in payload.get("patas", [])
+    ]
+
+    if any(g["logos"] for g in grupos_pata):
+        es_gris = tuple(accent) == CATEGORY_COLORS["general"]
+        builder.render_sponsor_pata(
+            grupos_pata, y_position=max(y + 30, sponsor_box["y"]),
+            frame_color=(255, 255, 255) if es_gris else accent,
+            label_color=CATEGORY_COLORS["porcicola"] if es_gris else accent,
+            header_logo=builder.asset_repo.get_logo("grupo_bios"),
+            label_font_path=font_bold,
+        )
     else:
         apoyo_sponsor = payload.get("apoyo_logo") or payload.get("apoyos_texto")
-        if not apoyo_sponsor:
-            logo_marca = builder.asset_repo.get_logo(decision["marca"])
-            apoyo_sponsor = str(logo_marca) if logo_marca else None
-        builder.render_sponsor_fallback(apoyo_sponsor, y_position=sponsor_box["y"], font_path=font_regular)
+        if apoyo_sponsor:
+            builder.render_sponsor_fallback(apoyo_sponsor, y_position=sponsor_box["y"], font_path=font_regular)
 
     return Path(builder.save(str(output_path)))
 
