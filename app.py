@@ -260,7 +260,7 @@ with tab_generar:
         st.progress((idx + 1) / len(pasos), text=f"Paso {idx + 1} de {len(pasos)} · {PASOS_TITULOS[paso]}")
 
         pendientes: Dict[str, List[str]] = {n: [] for n in pasos}
-        ort: Dict[str, List[str]] = {"datos": [], "charlas": [], "pata": []}
+        ort: Dict[str, List[str]] = {"datos": [], "charlas": []}
 
         # ---------------- Paso: marca y linea de negocio ----------------
         with st.container(key="paso_marca"):
@@ -408,19 +408,18 @@ with tab_generar:
         # ---------------- Paso: pata de patrocinadores ----------------
         with st.container(key="paso_pata"):
             st.subheader(PASOS_TITULOS["pata"])
-            st.caption("Todo es opcional: sube logos en «Apoyan», en «Invitan» o en ambos; solo aparece el grupo que tenga logos.")
+            st.caption(
+                "Todo es opcional. Cada grupo puede llevar logos, un nombre en texto o ambos; "
+                "solo aparece el grupo que tenga contenido (si solo llenas «Invitan», sale solo «Invita»)."
+            )
             archivos_apoyan = st.file_uploader(
                 "Logos que APOYAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_apoyan",
             )
+            texto_apoyan = st.text_input("Nombre de quien APOYA (texto, opcional)", key="texto_apoyan", placeholder="Ej. Agro Insumos Donde Pollo")
             archivos_invitan = st.file_uploader(
                 "Logos que INVITAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_invitan",
             )
-            apoyos_texto = st.text_input(
-                "Texto de apoyo (solo se usa si no subes logos)",
-                key="apoyos_texto", placeholder="Ej. Con el apoyo de Contegral",
-            )
-            _revisar_ortografia("Texto de apoyo", apoyos_texto, ort["pata"])
-            _cierre_ortografia("pata", ort, pendientes)
+            texto_invitan = st.text_input("Nombre de quien INVITA (texto, opcional)", key="texto_invitan", placeholder="Ej. Veterinaria Agrollanos")
 
         # ---------------- Paso: informacion administrativa ----------------
         with st.container(key="paso_admin"):
@@ -440,7 +439,6 @@ with tab_generar:
             col_res, col_img = st.columns([1, 1], gap="large")
             with col_res:
                 st.subheader(PASOS_TITULOS["final"])
-                logos_apoyan_n, logos_invitan_n = len(archivos_apoyan or []), len(archivos_invitan or [])
                 es_charla = tipo_evento in TIPOS_CON_CHARLAS
                 resumen = [
                     f"**Marca líder:** {(marca_lider_otro or 'Otro') if marca_lider == 'Otro' else marca_lider}",
@@ -455,10 +453,14 @@ with tab_generar:
                     resumen.append(
                         f"**Vigencia:** {fecha_inicio_promo.strftime('%d/%m/%Y')} al {fecha_fin_promo.strftime('%d/%m/%Y')}"
                     )
-                texto_pata = f" · texto «{apoyos_texto}»" if apoyos_texto and not (logos_apoyan_n or logos_invitan_n) else ""
+                def _resumen_grupo(archivos, texto):
+                    partes = ([f"{len(archivos)} logo(s)"] if archivos else []) + ([f"«{texto.strip()}»"] if texto.strip() else [])
+                    return " + ".join(partes) or "—"
+
                 resumen += [
                     f"**Fondo:** {fondo_elegido or 'automático'}",
-                    f"**Pata:** {logos_apoyan_n} logo(s) que apoyan · {logos_invitan_n} logo(s) que invitan{texto_pata}",
+                    f"**Apoya:** {_resumen_grupo(archivos_apoyan, texto_apoyan)}",
+                    f"**Invita:** {_resumen_grupo(archivos_invitan, texto_invitan)}",
                     f"**Centro Operativo:** {centro_operativo or '—'}",
                 ]
                 st.markdown("\n".join(f"- {linea}" for linea in resumen))
@@ -475,8 +477,10 @@ with tab_generar:
                     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
                     patas = []
-                    for tipo_pata, archivos_pata in (("Apoya", archivos_apoyan), ("Invita", archivos_invitan)):
-                        if not archivos_pata:
+                    for tipo_pata, archivos_pata, texto_pata in (
+                        ("Apoya", archivos_apoyan, texto_apoyan), ("Invita", archivos_invitan, texto_invitan),
+                    ):
+                        if not archivos_pata and not texto_pata.strip():
                             continue
                         carpeta_aliados = UPLOADS_DIR / "aliados"
                         carpeta_aliados.mkdir(parents=True, exist_ok=True)
@@ -485,7 +489,7 @@ with tab_generar:
                             ruta_logo = carpeta_aliados / f"{tipo_pata.lower()}_{subido.name}"
                             ruta_logo.write_bytes(subido.getvalue())
                             rutas.append(str(ruta_logo))
-                        patas.append({"tipo": tipo_pata, "logos": rutas})
+                        patas.append({"tipo": tipo_pata, "logos": rutas, "texto": texto_pata.strip()})
 
                     if es_charla:
                         palabra_categoria, palabra_titulo = HEADLINE_POR_TIPO_EVENTO[tipo_evento]
@@ -511,7 +515,6 @@ with tab_generar:
                         "tema_evento": tema_evento,
                         "fecha_texto": fecha_texto,
                         "ponentes": ponentes,
-                        "apoyos_texto": apoyos_texto,
                         # Metadata administrativa del formulario - no se dibuja en la pieza.
                         "marca_lider": marca_lider_otro if marca_lider == "Otro" else marca_lider,
                         "centro_operativo": centro_operativo,

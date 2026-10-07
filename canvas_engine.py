@@ -556,7 +556,7 @@ class InvitationCanvasBuilder:
         if rol_lineas:
             cursor_y = self.draw_text_block(rol_lineas, role_font_path, 21, texto_x, cursor_y + 2, (215, 215, 215), "left", 3, measure_only=True)
         if empresa_lineas:
-            cursor_y = self.draw_text_block(empresa_lineas, role_font_path, 21, texto_x, cursor_y, (255, 255, 255), "left", 3, measure_only=True)
+            cursor_y = self.draw_text_block(empresa_lineas, role_font_path, 21, texto_x, cursor_y + 4, (255, 255, 255), "left", 3, measure_only=True)
         if tema_lineas:
             cursor_y = self.draw_text_block(tema_lineas, topic_font_path, 21, texto_x, cursor_y + 8 + 12, accent_color, "left", 7, measure_only=True)
         card_bottom = max(cursor_y + padding + 6, y + min_height)
@@ -577,7 +577,7 @@ class InvitationCanvasBuilder:
         if rol_lineas:
             cursor_y = self.draw_text_block(rol_lineas, role_font_path, 21, texto_x, cursor_y + 2, (215, 215, 215), "left", 3)
         if empresa_lineas:
-            cursor_y = self.draw_text_block(empresa_lineas, role_font_path, 21, texto_x, cursor_y, (255, 255, 255), "left", 3)
+            cursor_y = self.draw_text_block(empresa_lineas, role_font_path, 21, texto_x, cursor_y + 4, (255, 255, 255), "left", 3)
         if tema_lineas:
             linea_y = cursor_y + 8
             self.draw.line([(x + 1, linea_y), (x + width - 64, linea_y)], fill=tuple(accent_color), width=2)
@@ -686,16 +686,18 @@ class InvitationCanvasBuilder:
         label_font_path: str = str(DEFAULT_FONT_BOLD),
         label_size: int = 52,
         max_logo_height: int = 104,
+        text_size: int = 32,
         box_fill: Tuple[int, int, int] = (247, 247, 247),
         max_width: int = 940,
     ) -> int:
         """
         Pata de patrocinadores como en las piezas reales (assets/Templates/Patas/):
         logo de Grupo Bios arriba rompiendo un marco redondeado (color de la
-        linea) y, debajo, una caja clara con uno o mas grupos "Etiqueta | logos"
-        (ej. "Apoya | logo", "Invita | logo"). `groups` = [{"label": "Invita",
-        "logos": [rutas...]}]; la etiqueta se pluraliza sola ("Invitan") si
-        el grupo trae mas de un logo. Devuelve la Y inferior de la pata.
+        linea) y, debajo, una caja clara con uno o mas grupos "Etiqueta | contenido"
+        (ej. "Apoya | logo", "Invita | AGRO INSUMOS DONDE POLLO"). `groups` =
+        [{"label": "Invita", "logos": [rutas...], "texto": "..."}]: cada grupo
+        lleva logos, texto o ambos, y la etiqueta se pluraliza sola ("Invitan")
+        si trae mas de un elemento. Devuelve la Y inferior de la pata.
         """
         grupos = []
         for g in groups:
@@ -705,9 +707,11 @@ class InvitationCanvasBuilder:
                     logos.append(self._recortar_margenes(Image.open(ruta)))
                 except (FileNotFoundError, OSError) as e:
                     print(f"[AVISO] No se pudo abrir el logo '{ruta}' ({e}); se omite.")
-            if logos:
+            texto = str(g.get("texto") or "").strip()
+            if logos or texto:
                 etiqueta = str(g.get("label", "Apoya"))
-                grupos.append((etiqueta + "n" if len(logos) > 1 and not etiqueta.endswith("n") else etiqueta, logos))
+                n_elementos = len(logos) + (1 if texto else 0)
+                grupos.append((etiqueta + "n" if n_elementos > 1 and not etiqueta.endswith("n") else etiqueta, logos, texto))
         if not grupos:
             return y_position
 
@@ -723,22 +727,35 @@ class InvitationCanvasBuilder:
         while True:
             alto_logo = int(max_logo_height * f)
             font_label = self._load_font(label_font_path, int(label_size * f))
-            escalados, anchos_grupo = [], []
-            for etiqueta, logos in grupos:
+            font_texto = self._load_font(label_font_path, int(text_size * f))
+            paso_texto = int(text_size * f * 1.25)
+            escalados, textos, anchos_grupo, altos = [], [], [], [int(60 * f)]
+            for etiqueta, logos, texto in grupos:
                 fila = []
                 for im in logos:
                     k = min(alto_logo / im.height, (alto_logo * 2.4) / im.width)
                     fila.append(im.resize((max(1, int(im.width * k)), max(1, int(im.height * k))), Image.LANCZOS))
+                lineas = self._wrap_lines(texto.upper(), font_texto, int(300 * f)) if texto else []
+                ancho_texto = max((self.draw.textbbox((0, 0), l, font=font_texto)[2] for l in lineas), default=0)
                 escalados.append(fila)
+                textos.append(lineas)
+                if fila:
+                    altos.append(alto_logo)
+                if lineas:
+                    altos.append(paso_texto * len(lineas))
                 bl = self.draw.textbbox((0, 0), etiqueta, font=font_label)
-                anchos_grupo.append((bl[2] - bl[0]) + sep_gap * 2 + 2 + sum(i.width for i in fila) + gap_logo * (len(fila) - 1))
+                elementos = len(fila) + (1 if lineas else 0)
+                anchos_grupo.append(
+                    (bl[2] - bl[0]) + sep_gap * 2 + 2 + sum(i.width for i in fila) + ancho_texto + gap_logo * (elementos - 1)
+                )
             box_w = sum(anchos_grupo) + gap_grupo * (len(grupos) - 1) + 2 * pad_x
             if box_w <= max_width or f <= 0.55:
                 break
             f -= 0.05
 
+        alto_contenido = max(altos)
         pad_y = int(28 * f)
-        box_h = alto_logo + 2 * pad_y
+        box_h = alto_contenido + 2 * pad_y
         if encabezado:
             kh = (70 * f) / encabezado.height
             encabezado = encabezado.resize((int(encabezado.width * kh), int(encabezado.height * kh)), Image.LANCZOS)
@@ -780,62 +797,27 @@ class InvitationCanvasBuilder:
 
         x = box_x0 + pad_x
         hb = self.draw.textbbox((0, 0), "H", font=font_label)
-        for (etiqueta, _), fila in zip(grupos, escalados):
+        hbt = self.draw.textbbox((0, 0), "H", font=font_texto)
+        for (etiqueta, _, _), fila, lineas in zip(grupos, escalados, textos):
             bl = self.draw.textbbox((0, 0), etiqueta, font=font_label)
             y_texto = box_cy - (hb[3] - hb[1]) / 2 - hb[1]
             self.draw.text((x - bl[0], y_texto), etiqueta, font=font_label, fill=tuple(label_color))
             x += (bl[2] - bl[0]) + sep_gap
-            self.draw.line([(x, box_cy - alto_logo * 0.34), (x, box_cy + alto_logo * 0.34)], fill=tuple(label_color), width=2)
+            self.draw.line([(x, box_cy - alto_contenido * 0.34), (x, box_cy + alto_contenido * 0.34)], fill=tuple(label_color), width=2)
             x += 2 + sep_gap
             for im in fila:
                 self.image.paste(im, (int(x), int(box_cy - im.height / 2)), im)
                 x += im.width + gap_logo
+            if lineas:
+                y_linea = box_cy - paso_texto * len(lineas) / 2 + (paso_texto - (hbt[3] - hbt[1])) / 2 - hbt[1]
+                for linea in lineas:
+                    b = self.draw.textbbox((0, 0), linea, font=font_texto)
+                    self.draw.text((x - b[0], y_linea), linea, font=font_texto, fill=(45, 45, 45))
+                    y_linea += paso_texto
+                x += max(self.draw.textbbox((0, 0), l, font=font_texto)[2] for l in lineas) + gap_logo
             x += gap_grupo - gap_logo
 
         return int(box_y0 + box_h)
-
-    def render_sponsor_fallback(
-        self,
-        sponsor_text_or_logo_path: Optional[str],
-        y_position: int,
-        font_path: str = str(DEFAULT_FONT_REGULAR),
-        font_size: int = 28,
-        max_logo_size: Tuple[int, int] = (260, 110),
-    ) -> int:
-        """
-        Intenta cargar un logo desde `sponsor_text_or_logo_path` (si parece ruta de imagen).
-        Si la ruta es nula, no existe o falla la carga, dibuja el mismo valor como
-        texto de respaldo con tipografia corporativa. Devuelve la Y siguiente al bloque.
-        """
-        if sponsor_text_or_logo_path:
-            path = Path(sponsor_text_or_logo_path)
-            if path.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"):
-                try:
-                    logo = Image.open(path).convert("RGBA")
-                    logo.thumbnail(max_logo_size)
-                    pos_x = int((self.width - logo.width) / 2)
-                    self.image.paste(logo, (pos_x, y_position), logo)
-                    return y_position + logo.height
-                except (FileNotFoundError, OSError):
-                    print(
-                        f"[AVISO] Logo de patrocinador no encontrado en "
-                        f"'{sponsor_text_or_logo_path}'; usando texto de respaldo."
-                    )
-
-        texto = sponsor_text_or_logo_path or ""
-        if not texto:
-            return y_position
-
-        font = self._load_font(font_path, font_size)
-        bbox = self.draw.textbbox((0, 0), texto, font=font)
-        ancho_texto = bbox[2] - bbox[0]
-        alto_texto = bbox[3] - bbox[1]
-        self.draw.text(((self.width - ancho_texto) / 2, y_position), texto, font=font, fill=(255, 255, 255))
-        return y_position + alto_texto
-
-    # ------------------------------------------------------------------
-    # Exportacion
-    # ------------------------------------------------------------------
 
     def save(self, output_path: str) -> str:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)

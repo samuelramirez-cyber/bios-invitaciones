@@ -183,15 +183,18 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
         )
 
     # --- Pata de patrocinadores ---
-    # Prioridad: `patas` (grupos "Apoya"/"Invita" con sus logos) -> apoyo_logo /
-    # apoyos_texto explicitos (fallback de texto, validado por el Caso 4 de
-    # test_all_cases.py). Sin ninguno de los anteriores no se dibuja pata.
+    # `patas`: grupos "Apoya"/"Invita", cada uno con logos y/o texto; solo sale
+    # lo que tenga contenido. El campo heredado `apoyos_texto` (CSV, webhook,
+    # CLI) se trata como un grupo "Apoya" de solo texto. Sin nada, no hay pata.
     sponsor_box = boxes["sponsor"]
     grupos_pata = [
-        {"label": g.get("tipo", "Apoya"), "logos": g.get("logos", [])} for g in payload.get("patas", [])
+        {"label": g.get("tipo", "Apoya"), "logos": g.get("logos", []), "texto": g.get("texto", "")}
+        for g in payload.get("patas", [])
     ]
+    if not grupos_pata and str(payload.get("apoyos_texto") or "").strip():
+        grupos_pata = [{"label": "Apoya", "logos": [], "texto": payload["apoyos_texto"]}]
 
-    if any(g["logos"] for g in grupos_pata):
+    if any(g["logos"] or str(g["texto"]).strip() for g in grupos_pata):
         es_gris = tuple(accent) == CATEGORY_COLORS["general"]
         builder.render_sponsor_pata(
             grupos_pata, y_position=max(y + 30, sponsor_box["y"]),
@@ -200,10 +203,6 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
             header_logo=builder.asset_repo.get_logo("grupo_bios"),
             label_font_path=font_bold,
         )
-    else:
-        apoyo_sponsor = payload.get("apoyo_logo") or payload.get("apoyos_texto")
-        if apoyo_sponsor:
-            builder.render_sponsor_fallback(apoyo_sponsor, y_position=sponsor_box["y"], font_path=font_regular)
 
     return Path(builder.save(str(output_path)))
 
