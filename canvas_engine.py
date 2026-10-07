@@ -302,6 +302,122 @@ class InvitationCanvasBuilder:
         self.draw.line([(x, y_top), (x, y_bottom)], fill=color, width=width)
         return self
 
+    def draw_title_lockup(
+        self,
+        category_word: str,
+        headline_word: str,
+        date_lines: List[str],
+        category_font: str,
+        headline_font: str,
+        date_strong_font: str,
+        date_font: str,
+        accent: Tuple[int, int, int],
+        top_y: int,
+        category_size: int = 78,
+        headline_size: int = 116,
+        date_size: int = 38,
+        icon_path: Optional[str] = None,
+        icon_size: int = 105,
+        gap_title: int = 38,
+        gap_date: int = 22,
+        max_width: int = 960,
+        date_max_width: int = 420,
+        strong_items: int = 1,
+        text_color: Tuple[int, int, int] = (255, 255, 255),
+        muted_color: Tuple[int, int, int] = (214, 214, 214),
+    ) -> int:
+        """
+        Bloque de titulo como en las piezas reales: palabra de categoria (acento)
+        sobre palabra grande (blanca), ambas alineadas a la DERECHA contra un
+        divisor vertical del color de acento; la fecha/lugar queda a la
+        IZQUIERDA del otro lado. Icono de linea bajo el titular, alineado a la
+        derecha. Todo el conjunto se centra horizontalmente en el lienzo (si no
+        cabe en `max_width`, se reducen los tamanos proporcionalmente).
+        Devuelve la Y inferior del bloque (para ubicar el subtitulo debajo).
+        """
+        divider_w = 3
+        escala = 1.0
+        while True:
+            cat_sz, head_sz, date_sz = (int(v * escala) for v in (category_size, headline_size, date_size))
+            f_cat = self._load_font(category_font, cat_sz)
+            f_head = self._load_font(headline_font, head_sz)
+            f_strong = self._load_font(date_strong_font, date_sz)
+            f_date = self._load_font(date_font, date_sz)
+
+            lineas_fecha: List[Tuple[str, ImageFont.ImageFont]] = []
+            for i, item in enumerate(date_lines):
+                fuente = f_strong if i < strong_items else f_date
+                for sub in self._wrap_lines(str(item), fuente, date_max_width):
+                    lineas_fecha.append((sub, fuente))
+
+            def ancho(txt, fnt):
+                b = self.draw.textbbox((0, 0), txt, font=fnt)
+                return b[2] - b[0]
+
+            title_w = max(ancho(category_word, f_cat), ancho(headline_word, f_head))
+            date_w = max((ancho(t, f) for t, f in lineas_fecha), default=0)
+            total = title_w + gap_title + divider_w + gap_date + date_w
+            if total <= max_width or escala <= 0.6:
+                break
+            escala -= 0.04
+
+        left = (self.width - total) / 2
+        title_right = left + title_w
+        divider_x = title_right + gap_title
+        date_x = divider_x + divider_w + gap_date
+
+        def cap_box(fnt):
+            return self.draw.textbbox((0, 0), "H", font=fnt)
+
+        # Titulo: se ancla por altura de mayuscula (no por tinta) para que la
+        # posicion vertical no cambie segun las letras de cada palabra.
+        cb = cap_box(f_cat)
+        cap_cat = cb[3] - cb[1]
+        hb = cap_box(f_head)
+        cap_head = hb[3] - hb[1]
+
+        y_cat = top_y
+        b = self.draw.textbbox((0, 0), category_word, font=f_cat)
+        self.draw.text((title_right - b[2], y_cat - cb[1]), category_word, font=f_cat, fill=accent)
+
+        gap_cat_head = max(int(cat_sz * 0.16), 8)
+        y_head = y_cat + cap_cat + gap_cat_head
+        b = self.draw.textbbox((0, 0), headline_word, font=f_head)
+        self.draw.text((title_right - b[2], y_head - hb[1]), headline_word, font=f_head, fill=text_color)
+        head_baseline = y_head + cap_head
+        tiene_descendente = any(c in "gjpqyç" for c in headline_word.lower())
+        title_bottom = head_baseline
+
+        if icon_path:
+            try:
+                with Image.open(icon_path) as ic:
+                    iw, ih = ic.size
+                lado = int(icon_size * escala)
+                factor = min(lado / iw, lado / ih)
+                w_icono = int(iw * factor)
+                y_icono = head_baseline + int(head_sz * (0.30 if tiene_descendente else 0.20))
+                res = self.paste_image(icon_path, x=title_right - w_icono / 2, y=y_icono,
+                                       max_size=(lado, lado), center_x=True)
+                if res:
+                    title_bottom = res[1] + res[3]
+            except (FileNotFoundError, OSError) as e:
+                print(f"[AVISO] No se pudo abrir el icono '{icon_path}' ({e}); se omite.")
+
+        # Fecha/lugar: alineada a la izquierda, primera linea a la altura de la palabra de categoria.
+        pitch = int(date_sz * 1.22)
+        y = top_y
+        for texto, fuente in lineas_fecha:
+            fb = cap_box(fuente)
+            color = text_color if fuente is f_strong else muted_color
+            self.draw.text((date_x, y - fb[1]), texto, font=fuente, fill=color)
+            y += pitch
+        fdb = cap_box(f_date)
+        date_bottom = top_y + pitch * (len(lineas_fecha) - 1) + (fdb[3] - fdb[1]) if lineas_fecha else top_y
+
+        bottom = int(max(title_bottom, date_bottom))
+        self.draw_vertical_divider(int(divider_x), top_y - 6, bottom + 6, accent, divider_w)
+        return bottom + 6
+
     def draw_bracket_frame(
         self, x0: int, y0: int, x1: int, y1: int,
         color: Tuple[int, int, int] = (255, 255, 255),

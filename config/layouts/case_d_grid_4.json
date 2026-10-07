@@ -1,16 +1,45 @@
 {
   "case_id": "case_d_grid_4",
   "description": "hasta 5 ponentes - tarjetas en grilla de 2 columnas",
-  "safe_area": { "top": 55, "bottom": 1890 },
-  "colors": { "text_primary": [255, 255, 255], "text_muted": [210, 210, 210] },
+  "safe_area": {
+    "top": 55,
+    "bottom": 1890
+  },
+  "colors": {
+    "text_primary": [
+      255,
+      255,
+      255
+    ],
+    "text_muted": [
+      210,
+      210,
+      210
+    ]
+  },
   "bounding_boxes": {
-    "category_word": { "x": 55, "y": 65, "font_size": 38 },
-    "headline_word": { "x": 55, "y": 110, "font_size": 66 },
-    "divider": { "gap": 35, "y_top": 65, "y_bottom": 250 },
-    "date_block": { "x_right": 1025, "y": 70, "font_size": 24, "line_spacing": 6 },
-    "subtitle": { "y": 370, "max_width": 950, "font_size": 34, "frame_margin": 35 },
-    "speaker_cards": { "start_y": 1120, "columns": 2 },
-    "maestria_badge": { "y": 1610 },
-    "sponsor": { "y": 1800 }
+    "title_lockup": {
+      "top_y": 185,
+      "category_size": 78,
+      "headline_size": 116,
+      "date_size": 38,
+      "icon_size": 105
+    },
+    "subtitle": {
+      "y": 370,
+      "max_width": 950,
+      "font_size": 34,
+      "frame_margin": 35
+    },
+    "speaker_cards": {
+      "start_y": 1120,
+      "columns": 2
+    },
+    "maestria_badge": {
+      "y": 1610
+    },
+    "sponsor": {
+      "y": 1800
+    }
   }
 }

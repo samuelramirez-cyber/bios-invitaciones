@@ -99,41 +99,29 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
     builder.apply_gradient_overlay()
     builder.apply_grain_texture()
 
-    # --- Bloque de titulo: palabra de categoria (color acento) + palabra grande (blanco) ---
-    cat_box = boxes["category_word"]
-    head_box = boxes["headline_word"]
-    builder.draw_text_block([payload["palabra_categoria"]], font_bold, cat_box["font_size"], cat_box["x"], cat_box["y"], accent, "left")
-    builder.draw_text_block([payload["palabra_titulo"]], font_black, head_box["font_size"], head_box["x"], head_box["y"], TEXT_PRIMARY, "left")
-
-    ancho_cat = builder.measure_text_width(payload["palabra_categoria"], font_bold, cat_box["font_size"])
-    ancho_head = builder.measure_text_width(payload["palabra_titulo"], font_black, head_box["font_size"])
-    titulo_x_max = cat_box["x"] + max(ancho_cat, ancho_head)
-
-    # --- Icono de linea (Ganaderia Carne/Leche, Avicola Ponedoras/Engorde, etc.)
-    # junto a la palabra grande - ambiguo sin sub_linea para Ganaderia/Avicola,
-    # y sin definir aun para eventos multi-marca/multi-categoria (ver AssetRepository.get_category_icon) ---
+    # --- Bloque de titulo centrado (como en las piezas reales): palabra de
+    # categoria (acento) sobre palabra grande (blanca), alineadas a la derecha
+    # contra un divisor del color de acento; fecha/lugar a la izquierda del
+    # otro lado y el icono de linea bajo el titular. Icono: ambiguo sin
+    # sub_linea para Ganaderia/Avicola y sin definir para co-marca/multi-categoria
+    # (ver AssetRepository.get_category_icon) ---
+    lockup = boxes["title_lockup"]
     icono_linea = builder.asset_repo.get_category_icon(decision["marca"], decision["categoria"], payload.get("sub_linea"))
-    if icono_linea:
-        icon_size = int(head_box["font_size"] * 1.1)
-        builder.paste_image(
-            icono_linea, x=head_box["x"] + ancho_head + 24, y=head_box["y"],
-            max_size=(icon_size, icon_size),
-        )
-
-    # --- Divisor vertical + bloque de fecha/lugar (arriba-derecha) ---
-    div_box = boxes["divider"]
-    divider_x = titulo_x_max + div_box["gap"]
-    builder.draw_vertical_divider(divider_x, div_box["y_top"], div_box["y_bottom"], TEXT_MUTED, 3)
-
-    date_box = boxes["date_block"]
-    lineas_fecha = _normalizar_fecha(payload["fecha_texto"])
-    y_fecha = builder.draw_text_block(
-        lineas_fecha, font_bold, date_box["font_size"], date_box["x_right"], date_box["y"],
-        TEXT_MUTED, "right", date_box["line_spacing"],
+    lockup_bottom = builder.draw_title_lockup(
+        payload["palabra_categoria"], payload["palabra_titulo"], _normalizar_fecha(payload["fecha_texto"]),
+        category_font=get_brand_font_name(marca_payload, "medium"),
+        headline_font=font_bold,
+        date_strong_font=get_brand_font_name(marca_payload, "semibold"),
+        date_font=font_regular,
+        accent=accent, top_y=lockup["top_y"],
+        category_size=lockup["category_size"], headline_size=lockup["headline_size"],
+        date_size=lockup["date_size"], icon_path=str(icono_linea) if icono_linea else None,
+        icon_size=lockup["icon_size"],
     )
 
-    # --- Subtitulo/tema, enmarcado con corchetes de esquina ---
-    sub_box = boxes["subtitle"]
+    # --- Subtitulo/tema, enmarcado con corchetes de esquina (siempre debajo del bloque de titulo) ---
+    sub_box = dict(boxes["subtitle"])
+    sub_box["y"] = max(sub_box["y"], lockup_bottom + sub_box["frame_margin"] + 40)
     ancho_sub, alto_sub, _ = builder.measure_wrapped_text(
         payload["tema_evento"], font_bold, sub_box["font_size"], sub_box["max_width"],
     )

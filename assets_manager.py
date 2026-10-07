@@ -84,9 +84,9 @@ FONT_FAMILY_BY_MARCA[frozenset({"contegral", "finca"})] = "alexandria"
 # Peso con nombre por rol semantico, segun lo que ofrece cada familia:
 # Akwe Pro no tiene "Black" real -> se usa su ExtraBold como equivalente.
 ROLE_WEIGHT_BY_FAMILY = {
-    "alexandria": {"regular": "Regular", "bold": "Bold", "black": "Black"},
-    "montserrat": {"regular": "Regular", "bold": "Bold", "black": "Black"},
-    "akwepro": {"regular": "Regular", "bold": "Bold", "black": "ExtraBold"},
+    "alexandria": {"regular": "Regular", "medium": "Medium", "semibold": "SemiBold", "bold": "Bold", "black": "Black"},
+    "montserrat": {"regular": "Regular", "medium": "Medium", "semibold": "SemiBold", "bold": "Bold", "black": "Black"},
+    "akwepro": {"regular": "Regular", "medium": "Medium", "semibold": "DemiBold", "bold": "Bold", "black": "ExtraBold"},
 }
 DEFAULT_FONT_FAMILY = "montserrat"  # marca desconocida/vacia -> fallback neutro
 
