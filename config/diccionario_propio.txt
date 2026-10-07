@@ -1,0 +1,43 @@
+# Palabras validas del negocio que el corrector ortografico no debe marcar.
+# Una por linea (sin importar mayusculas). Las lineas con # son comentarios.
+
+# Marcas y programas
+contegral
+finca
+bios
+sinergia
+maestría
+
+# Lineas de negocio y terminos tecnicos
+porcícola
+porcícolas
+porcicultura
+porcicultor
+porcicultores
+avícola
+avícolas
+avicultura
+avicultor
+avicultores
+acuícola
+acuicultor
+acuicultores
+cunícola
+cunicultura
+equinos
+bioseguridad
+bovinos
+lechones
+destete
+ponedoras
+
+# Municipios y centros operativos
+envigado
+itagüí
+bogotá
+mosquera
+cartago
+buga
+neiva
+bucaramanga
+ciénaga

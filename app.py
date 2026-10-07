@@ -28,6 +28,7 @@ from PIL import Image
 import main as pipeline
 from assets_manager import CATEGORY_KEYWORDS
 from batch_processor import generar_reporte_resumen, process_csv_file, process_json_folder
+from spellcheck import formatear_errores, revisar_texto
 
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / "output" / "streamlit"
@@ -86,6 +87,11 @@ SUB_LINEAS_POR_CATEGORIA = {
 TIPOS_EVENTO = ["Charla Maestra", "Día de Campo", "Actividad Promocional"]
 TIPOS_CON_CHARLAS = ("Charla Maestra", "Día de Campo")
 MAX_CHARLAS = 3
+
+CENTROS_OPERATIVOS = [
+    "Envigado", "Itagüí", "Bogotá", "Mosquera", "Cartago",
+    "Buga", "Neiva", "Bucaramanga", "Ciénaga de Oro",
+]
 
 TIPOS_ACTIVACION = [
     "Día del pollito", "Día del ganadero", "Día del acuicultor",
@@ -151,6 +157,14 @@ def _miniatura_fondo(ruta: Path) -> Optional[str]:
 
 def _elegir_fondo(nombre: Optional[str]) -> None:
     st.session_state["fondo_elegido"] = nombre
+
+
+def _revisar_ortografia(etiqueta: str, texto: str, acumulado: List[str]) -> None:
+    """Muestra bajo el campo las palabras con error (con sugerencia) y las acumula para bloquear la generacion."""
+    errores = revisar_texto(texto)
+    if errores:
+        st.warning(f"Ortografía en «{etiqueta}»: {formatear_errores(errores)}")
+        acumulado.append(etiqueta)
 
 
 def _mostrar_mensajes_capturados(texto: str) -> None:
@@ -225,6 +239,7 @@ with tab_generar:
         st.caption("Los eventos tipo Encuentro o Jornada no se gestionan por este formulario: van directo con los jefes de mercadeo.")
 
         titulo_evento = fecha = hora = lugar = ""
+        errores_ortografia: List[str] = []
         tipo_activacion = None
         descripcion_promocion = ""
         fecha_inicio_promo = fecha_fin_promo = None
@@ -235,6 +250,8 @@ with tab_generar:
             fecha = st.text_input("Fecha", key="fecha", placeholder="Ej. 24 de Septiembre de 2026")
             hora = st.text_input("Hora", key="hora", placeholder="Ej. 3:00 p.m.")
             lugar = st.text_input("Lugar", key="lugar", placeholder="Ej. Auditorio Central")
+            for etiqueta_o, valor_o in (("Título del evento", titulo_evento), ("Fecha", fecha), ("Lugar", lugar)):
+                _revisar_ortografia(etiqueta_o, valor_o, errores_ortografia)
         else:
             tipo_activacion = st.selectbox("Tipo de activación", TIPOS_ACTIVACION, key="tipo_activacion")
             descripcion_promocion = st.text_area(
@@ -246,6 +263,7 @@ with tab_generar:
                 ),
             )
             st.caption("Este texto queda sujeto a validación humana antes de publicarse.")
+            _revisar_ortografia("Descripción de la promoción", descripcion_promocion, errores_ortografia)
             col_fi, col_ff = st.columns(2)
             fecha_inicio_promo = col_fi.date_input("Fecha inicial de la promoción", key="fecha_inicio_promo")
             fecha_fin_promo = col_ff.date_input("Fecha final de la promoción", key="fecha_fin_promo")
@@ -256,17 +274,11 @@ with tab_generar:
             st.caption("Dato administrativo — no se imprime en la pieza.")
 
         st.markdown("**Imagen de fondo**")
-        archivo_fondo_propio = st.file_uploader(
-            "Subir mi propia imagen de fondo (opcional, tiene prioridad sobre la galería)",
-            type=["png", "jpg", "jpeg", "webp"], key="fondo_propio",
-        )
         fondos_disponibles = _listar_fondos()
         fondo_elegido = st.session_state.get("fondo_elegido")
         if fondo_elegido and not (BACKGROUNDS_DIR / fondo_elegido).is_file():
             fondo_elegido = None
-        if archivo_fondo_propio is not None:
-            st.caption("Se usará la imagen que subiste.")
-        elif fondo_elegido:
+        if fondo_elegido:
             miniatura_actual = _miniatura_fondo(BACKGROUNDS_DIR / fondo_elegido)
             if miniatura_actual:
                 st.image(miniatura_actual, width=140)
@@ -282,7 +294,7 @@ with tab_generar:
                 st.caption("No hay fondos específicos para la línea elegida; se muestran todos.")
         else:
             fondos_galeria = fondos_de_la_linea
-        if fondo_elegido and archivo_fondo_propio is None and (BACKGROUNDS_DIR / fondo_elegido) not in fondos_galeria:
+        if fondo_elegido and (BACKGROUNDS_DIR / fondo_elegido) not in fondos_galeria:
             st.warning("El fondo elegido no corresponde a la línea de negocio seleccionada.")
         with st.expander(f"Elegir de la galería ({len(fondos_galeria)} fondos)"):
             st.button("Automático (según línea de negocio)", key="fondo_auto", on_click=_elegir_fondo, args=(None,))
@@ -299,7 +311,8 @@ with tab_generar:
             "Pata / Sponsors (texto de apoyo, si no subes logos abajo)",
             key="apoyos_texto", placeholder="Ej. Con el apoyo de Contegral",
         )
-        st.caption("Pata: sube los logos de las marcas aliadas (tienen prioridad sobre el texto de arriba).")
+        _revisar_ortografia("Pata / Sponsors", apoyos_texto, errores_ortografia)
+        st.caption("Pata (opcional): sube logos en «Apoyan», en «Invitan» o en ambos; solo aparece el grupo que tenga logos.")
         archivos_apoyan = st.file_uploader(
             "Logos que APOYAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_apoyan",
         )
@@ -318,23 +331,24 @@ with tab_generar:
             for i in range(int(num_charlas)):
                 with st.expander(f"Charla {i + 1}", expanded=True):
                     titulo_charla = st.text_input("Título de la charla", key=f"charla_{i}_titulo")
+                    _revisar_ortografia(f"Título de la charla {i + 1}", titulo_charla, errores_ortografia)
                     expositor = st.text_input("Nombre del expositor", key=f"charla_{i}_expositor")
                     empresa_expositor = st.text_input("Empresa del expositor", key=f"charla_{i}_empresa")
-                    foto_subida = st.file_uploader(
-                        "Foto del expositor (opcional)", type=["png", "jpg", "jpeg"], key=f"charla_{i}_foto",
-                    )
                     if expositor.strip():
                         ponentes.append({
                             "name": expositor, "role": "", "empresa": empresa_expositor, "tema": titulo_charla,
-                            "_foto_subida": foto_subida,
                         })
 
         st.divider()
         st.subheader("Información administrativa")
-        centro_operativo = st.text_input("Centro Operativo", key="centro_operativo")
+        centro_operativo = st.selectbox("Centro Operativo", CENTROS_OPERATIVOS, index=None, placeholder="Selecciona la respuesta", key="centro_operativo")
         observaciones = st.text_area("Observaciones adicionales", key="observaciones")
 
         st.divider()
+        omitir_ortografia = False
+        if errores_ortografia:
+            st.error(f"Hay errores de ortografía en: {', '.join(errores_ortografia)}. Corrígelos antes de generar.")
+            omitir_ortografia = st.checkbox("Omitir la revisión ortográfica (la pieza saldrá con esos errores)", key="omitir_ortografia")
         generar = st.button("🎨 Generar Invitación", type="primary", width="stretch")
 
     with col_resultado:
@@ -352,6 +366,8 @@ with tab_generar:
                 st.error(mensaje_falta)
             elif not categoria:
                 st.error("Selecciona al menos una Línea de negocio.")
+            elif errores_ortografia and not omitir_ortografia:
+                st.error("No se generó: corrige la ortografía de los campos marcados (o marca «Omitir la revisión ortográfica»).")
             else:
                 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -367,21 +383,6 @@ with tab_generar:
                         ruta_logo.write_bytes(subido.getvalue())
                         rutas.append(str(ruta_logo))
                     patas.append({"tipo": tipo_pata, "logos": rutas})
-
-                # Resolver la foto subida de cada ponente (si hay) a una ruta real en disco.
-                carpeta_fotos_ponentes = UPLOADS_DIR / "ponentes"
-                ponentes_resueltos = []
-                for p in ponentes:
-                    p = dict(p)
-                    foto_subida = p.pop("_foto_subida", None)
-                    if foto_subida is not None:
-                        carpeta_fotos_ponentes.mkdir(parents=True, exist_ok=True)
-                        ruta_foto = carpeta_fotos_ponentes / f"{int(time.time() * 1000)}_{foto_subida.name}"
-                        ruta_foto.write_bytes(foto_subida.getvalue())
-                        p["photo"] = str(ruta_foto)
-                    else:
-                        p["photo"] = ""
-                    ponentes_resueltos.append(p)
 
                 if tipo_evento in TIPOS_CON_CHARLAS:
                     palabra_categoria, palabra_titulo = HEADLINE_POR_TIPO_EVENTO[tipo_evento]
@@ -406,20 +407,14 @@ with tab_generar:
                     "palabra_titulo": palabra_titulo,
                     "tema_evento": tema_evento,
                     "fecha_texto": fecha_texto,
-                    "ponentes": ponentes_resueltos,
+                    "ponentes": ponentes,
                     "apoyos_texto": apoyos_texto,
                     # Metadata administrativa del formulario - no se dibuja en la pieza.
                     "marca_lider": marca_lider_otro if marca_lider == "Otro" else marca_lider,
                     "centro_operativo": centro_operativo,
                     "observaciones": observaciones,
                 }
-                if archivo_fondo_propio is not None:
-                    carpeta_fondos = UPLOADS_DIR / "fondos"
-                    carpeta_fondos.mkdir(parents=True, exist_ok=True)
-                    ruta_fondo_propio = carpeta_fondos / f"{int(time.time() * 1000)}_{archivo_fondo_propio.name}"
-                    ruta_fondo_propio.write_bytes(archivo_fondo_propio.getvalue())
-                    payload["background_file"] = str(ruta_fondo_propio)
-                elif fondo_elegido:
+                if fondo_elegido:
                     payload["background_file"] = fondo_elegido
                 if sub_linea:
                     payload["sub_linea"] = sub_linea

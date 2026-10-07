@@ -676,7 +676,7 @@ class InvitationCanvasBuilder:
         tagline_font_path: str = str(DEFAULT_FONT_BOLD),
     ) -> int:
         """Insignia de marca centrada: 'Maestria' + categoria + tagline en color de acento."""
-        y = self.draw_wrapped_text("Maestria", title_font_path, self.width - 100, y_position, 44, (255, 255, 255), 4)
+        y = self.draw_wrapped_text("Maestría", title_font_path, self.width - 100, y_position, 44, (255, 255, 255), 4)
         y = self.draw_wrapped_text(categoria_label.upper(), category_font_path, self.width - 100, y + 22, 24, accent_color, 4)
         y = self.draw_wrapped_text(tagline, tagline_font_path, self.width - 100, y + 16, 20, (235, 235, 235), 4)
         return y

@@ -37,11 +37,11 @@ CATEGORY_COLORS = {
 }
 CATEGORY_MAESTRIA_LABEL = {
     "ganadera": "Ganadera",
-    "porcicola": "Porcicola",
-    "avicola": "Avicola",
-    "cunicola": "Cunicola",
+    "porcicola": "Porcícola",
+    "avicola": "Avícola",
+    "cunicola": "Cunícola",
     "equina": "Equina",
-    "acuicola": "Acuicola",
+    "acuicola": "Acuícola",
     "general": "en el Campo Colombiano",
 }
 
