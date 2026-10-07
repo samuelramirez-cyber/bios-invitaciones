@@ -88,6 +88,13 @@ TIPOS_EVENTO = ["Charla Maestra", "Día de Campo", "Actividad Promocional"]
 TIPOS_CON_CHARLAS = ("Charla Maestra", "Día de Campo")
 MAX_CHARLAS = 3
 
+PASOS_BASE = ["marca", "tipo", "datos", "charlas", "fondo", "pata", "admin", "final"]
+PASOS_TITULOS = {
+    "marca": "Marca y línea de negocio", "tipo": "Tipo de evento", "datos": "Datos del evento",
+    "charlas": "Charlas", "fondo": "Imagen de fondo", "pata": "Patrocinadores (pata)",
+    "admin": "Información administrativa", "final": "Revisión y vista previa",
+}
+
 CENTROS_OPERATIVOS = [
     "Envigado", "Itagüí", "Bogotá", "Mosquera", "Cartago",
     "Buga", "Neiva", "Bucaramanga", "Ciénaga de Oro",
@@ -167,6 +174,36 @@ def _revisar_ortografia(etiqueta: str, texto: str, acumulado: List[str]) -> None
         acumulado.append(etiqueta)
 
 
+def _cierre_ortografia(nombre: str, ort: Dict[str, List[str]], pendientes: Dict[str, List[str]]) -> None:
+    """Si el paso tiene errores de ortografia: aviso + opcion de omitir; sin omitir, bloquea 'Siguiente'."""
+    if not ort[nombre]:
+        return
+    st.error(f"Errores de ortografía en: {', '.join(ort[nombre])}.")
+    omitir = st.checkbox("Omitir la revisión ortográfica en este paso (saldrá con esos errores)", key=f"omitir_ortografia_{nombre}")
+    if not omitir:
+        pendientes[nombre].append("corrige la ortografía de los campos marcados")
+
+
+def _ir_a(paso: str) -> None:
+    st.session_state["paso"] = paso
+    if paso != "final":
+        st.session_state["ultimo_resultado"] = None
+
+
+def _reiniciar() -> None:
+    for clave in list(st.session_state.keys()):
+        del st.session_state[clave]
+
+
+def _css_ocultar_pasos(actual: str) -> str:
+    """Los pasos se renderizan todos (asi no se pierde lo escrito); aqui se ocultan los que no son el actual."""
+    reglas = "".join(
+        f'.st-key-paso_{n}, [data-testid="stLayoutWrapper"]:has(> .st-key-paso_{n}) {{display: none !important;}}'
+        for n in PASOS_BASE if n != actual
+    )
+    return f"<style>{reglas}</style>"
+
+
 def _mostrar_mensajes_capturados(texto: str) -> None:
     """Traduce los [AVISO]/[ERROR] que imprime el pipeline a alertas visuales de Streamlit."""
     for linea in texto.splitlines():
@@ -210,248 +247,309 @@ tab_generar, tab_lote = st.tabs(["🖼️ Generar Invitación", "📦 Carga Masi
 # ---------------------------------------------------------------------------
 
 with tab_generar:
-    col_form, col_resultado = st.columns([1, 2], gap="large")
+    _, centro, _ = st.columns([1, 4, 1])
+    with centro:
+        tipo_actual = st.session_state.get("tipo_evento", TIPOS_EVENTO[0])
+        pasos = [p for p in PASOS_BASE if not (p == "charlas" and tipo_actual not in TIPOS_CON_CHARLAS)]
+        paso = st.session_state.get("paso", "marca")
+        if paso not in pasos:
+            paso = "marca"
+        idx = pasos.index(paso)
 
-    with col_form:
-        st.subheader("Datos del evento")
+        st.markdown(_css_ocultar_pasos(paso), unsafe_allow_html=True)
+        st.progress((idx + 1) / len(pasos), text=f"Paso {idx + 1} de {len(pasos)} · {PASOS_TITULOS[paso]}")
 
-        marca_lider = st.selectbox("Marca líder que convoca", MARCA_LIDER_OPCIONES, key="marca_lider")
-        marca_lider_otro = ""
-        if marca_lider == "Otro":
-            marca_lider_otro = st.text_input("Especifique la marca/programa", key="marca_lider_otro")
-        if marca_lider in MARCA_LIDER_ASUNCION:
-            st.caption("⚠️ Tipografía/logo asumidos para este programa — pendiente de confirmar con el cliente.")
-        marca = MARCA_LIDER_A_MARCA.get(marca_lider, [])
+        pendientes: Dict[str, List[str]] = {n: [] for n in pasos}
+        ort: Dict[str, List[str]] = {"datos": [], "charlas": [], "pata": []}
 
-        categoria = st.multiselect(
-            "Línea de negocio (elige varias si el evento cubre mas de una)",
-            CATEGORIAS, default=[CATEGORIAS[0]], key="categoria",
-        )
-        if len(categoria) > 1:
-            st.caption("Evento multi-linea: se usa un color neutro y la insignia lista todas las categorias elegidas.")
+        # ---------------- Paso: marca y linea de negocio ----------------
+        with st.container(key="paso_marca"):
+            st.subheader(PASOS_TITULOS["marca"])
+            marca_lider = st.selectbox("Marca líder que convoca", MARCA_LIDER_OPCIONES, key="marca_lider")
+            marca_lider_otro = ""
+            if marca_lider == "Otro":
+                marca_lider_otro = st.text_input("Especifique la marca/programa", key="marca_lider_otro")
+            if marca_lider in MARCA_LIDER_ASUNCION:
+                st.caption("⚠️ Tipografía/logo asumidos para este programa — pendiente de confirmar con el cliente.")
+            marca = MARCA_LIDER_A_MARCA.get(marca_lider, [])
 
-        sub_linea = None
-        if len(categoria) == 1 and categoria[0] in SUB_LINEAS_POR_CATEGORIA:
-            opciones_sub = SUB_LINEAS_POR_CATEGORIA[categoria[0]]
-            sub_linea = st.radio(f"Sub-línea de {categoria[0]}", opciones_sub, key="sub_linea", horizontal=True)
+            categoria = st.multiselect(
+                "Línea de negocio (elige varias si el evento cubre más de una)",
+                CATEGORIAS, default=[CATEGORIAS[0]], key="categoria",
+            )
+            if len(categoria) > 1:
+                st.caption("Evento multi-línea: se usa un color neutro y la insignia lista todas las categorías elegidas.")
+            if not categoria:
+                pendientes["marca"].append("selecciona al menos una línea de negocio")
 
-        tipo_evento = st.radio("Tipo de evento", TIPOS_EVENTO, key="tipo_evento")
-        st.caption("Los eventos tipo Encuentro o Jornada no se gestionan por este formulario: van directo con los jefes de mercadeo.")
+            sub_linea = None
+            if len(categoria) == 1 and categoria[0] in SUB_LINEAS_POR_CATEGORIA:
+                sub_linea = st.radio(
+                    f"Sub-línea de {categoria[0]}", SUB_LINEAS_POR_CATEGORIA[categoria[0]], key="sub_linea", horizontal=True,
+                )
 
+        # ---------------- Paso: tipo de evento ----------------
+        with st.container(key="paso_tipo"):
+            st.subheader(PASOS_TITULOS["tipo"])
+            tipo_evento = st.radio("Selecciona el tipo de evento para el que necesitas la pieza", TIPOS_EVENTO, key="tipo_evento")
+            st.caption("Los eventos tipo Encuentro o Jornada no se gestionan por este formulario: van directo con los jefes de mercadeo.")
+
+        # ---------------- Paso: datos del evento ----------------
         titulo_evento = fecha = hora = lugar = ""
-        errores_ortografia: List[str] = []
         tipo_activacion = None
         descripcion_promocion = ""
         fecha_inicio_promo = fecha_fin_promo = None
         unidades_disponibles = ""
 
-        if tipo_evento in TIPOS_CON_CHARLAS:
-            titulo_evento = st.text_input("Título del evento", key="titulo", placeholder="Ej. Manejo Reproductivo Bovino")
-            fecha = st.text_input("Fecha", key="fecha", placeholder="Ej. 24 de Septiembre de 2026")
-            hora = st.text_input("Hora", key="hora", placeholder="Ej. 3:00 p.m.")
-            lugar = st.text_input("Lugar", key="lugar", placeholder="Ej. Auditorio Central")
-            for etiqueta_o, valor_o in (("Título del evento", titulo_evento), ("Fecha", fecha), ("Lugar", lugar)):
-                _revisar_ortografia(etiqueta_o, valor_o, errores_ortografia)
-        else:
-            tipo_activacion = st.selectbox("Tipo de activación", TIPOS_ACTIVACION, key="tipo_activacion")
-            descripcion_promocion = st.text_area(
-                "Describa en qué consiste la promoción", key="descripcion_promocion",
-                placeholder=(
-                    'Ej. "Por la compra de X unidades, lleva Y gratis" o "Nuestros expertos estarán '
-                    'con nosotros, visítanos para asesorarte. Tendremos regalos y sorpresas por tu '
-                    'compra en la marca."'
-                ),
-            )
-            st.caption("Este texto queda sujeto a validación humana antes de publicarse.")
-            _revisar_ortografia("Descripción de la promoción", descripcion_promocion, errores_ortografia)
-            col_fi, col_ff = st.columns(2)
-            fecha_inicio_promo = col_fi.date_input("Fecha inicial de la promoción", key="fecha_inicio_promo")
-            fecha_fin_promo = col_ff.date_input("Fecha final de la promoción", key="fecha_fin_promo")
-            unidades_disponibles = st.text_area(
-                "Unidades disponibles de cada referencia involucrada", key="unidades_disponibles",
-                placeholder="Ej. Ref. 1234 - 500 unidades; Ref. 5678 - 300 unidades",
-            )
-            st.caption("Dato administrativo — no se imprime en la pieza.")
-
-        st.markdown("**Imagen de fondo**")
-        fondos_disponibles = _listar_fondos()
-        fondo_elegido = st.session_state.get("fondo_elegido")
-        if fondo_elegido and not (BACKGROUNDS_DIR / fondo_elegido).is_file():
-            fondo_elegido = None
-        if fondo_elegido:
-            miniatura_actual = _miniatura_fondo(BACKGROUNDS_DIR / fondo_elegido)
-            if miniatura_actual:
-                st.image(miniatura_actual, width=140)
-            st.caption(f"Fondo elegido: {fondo_elegido}")
-        else:
-            st.caption("Automático: se elige al azar uno acorde a la línea de negocio. Revisa la vista previa o elige uno de la galería.")
-        palabras_linea = [p for linea in categoria for p in PALABRAS_FONDO_POR_LINEA.get(linea, [])]
-        fondos_de_la_linea = [f for f in fondos_disponibles if any(p in f.stem.lower() for p in palabras_linea)]
-        mostrar_todos = st.checkbox("Mostrar fondos de todas las líneas", key="fondos_todos")
-        if mostrar_todos or not fondos_de_la_linea:
-            fondos_galeria = fondos_disponibles
-            if not mostrar_todos:
-                st.caption("No hay fondos específicos para la línea elegida; se muestran todos.")
-        else:
-            fondos_galeria = fondos_de_la_linea
-        if fondo_elegido and (BACKGROUNDS_DIR / fondo_elegido) not in fondos_galeria:
-            st.warning("El fondo elegido no corresponde a la línea de negocio seleccionada.")
-        with st.expander(f"Elegir de la galería ({len(fondos_galeria)} fondos)"):
-            st.button("Automático (según línea de negocio)", key="fondo_auto", on_click=_elegir_fondo, args=(None,))
-            columnas_fondos = st.columns(2)
-            for i, ruta_fondo in enumerate(fondos_galeria):
-                with columnas_fondos[i % 2]:
-                    miniatura = _miniatura_fondo(ruta_fondo)
-                    if miniatura:
-                        st.image(miniatura, width="stretch")
-                    st.caption(ruta_fondo.stem.replace("_", " "))
-                    st.button("Usar este", key=f"fondo_{ruta_fondo.name}", on_click=_elegir_fondo, args=(ruta_fondo.name,))
-
-        apoyos_texto = st.text_input(
-            "Pata / Sponsors (texto de apoyo, si no subes logos abajo)",
-            key="apoyos_texto", placeholder="Ej. Con el apoyo de Contegral",
-        )
-        _revisar_ortografia("Pata / Sponsors", apoyos_texto, errores_ortografia)
-        st.caption("Pata (opcional): sube logos en «Apoyan», en «Invitan» o en ambos; solo aparece el grupo que tenga logos.")
-        archivos_apoyan = st.file_uploader(
-            "Logos que APOYAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_apoyan",
-        )
-        archivos_invitan = st.file_uploader(
-            "Logos que INVITAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_invitan",
-        )
-
-        ponentes: List[Dict[str, Any]] = []
-        if tipo_evento in TIPOS_CON_CHARLAS:
-            st.divider()
-            st.subheader("Charlas")
-            num_charlas = st.radio(
-                "¿Cuántas charlas tendrá el evento?", list(range(1, MAX_CHARLAS + 1)),
-                key="num_charlas", horizontal=True,
-            )
-            for i in range(int(num_charlas)):
-                with st.expander(f"Charla {i + 1}", expanded=True):
-                    titulo_charla = st.text_input("Título de la charla", key=f"charla_{i}_titulo")
-                    _revisar_ortografia(f"Título de la charla {i + 1}", titulo_charla, errores_ortografia)
-                    expositor = st.text_input("Nombre del expositor", key=f"charla_{i}_expositor")
-                    empresa_expositor = st.text_input("Empresa del expositor", key=f"charla_{i}_empresa")
-                    if expositor.strip():
-                        ponentes.append({
-                            "name": expositor, "role": "", "empresa": empresa_expositor, "tema": titulo_charla,
-                        })
-
-        st.divider()
-        st.subheader("Información administrativa")
-        centro_operativo = st.selectbox("Centro Operativo", CENTROS_OPERATIVOS, index=None, placeholder="Selecciona la respuesta", key="centro_operativo")
-        observaciones = st.text_area("Observaciones adicionales", key="observaciones")
-
-        st.divider()
-        omitir_ortografia = False
-        if errores_ortografia:
-            st.error(f"Hay errores de ortografía en: {', '.join(errores_ortografia)}. Corrígelos antes de generar.")
-            omitir_ortografia = st.checkbox("Omitir la revisión ortográfica (la pieza saldrá con esos errores)", key="omitir_ortografia")
-        generar = st.button("🎨 Generar Invitación", type="primary", width="stretch")
-
-    with col_resultado:
-        st.subheader("Resultado")
-
-        if generar:
+        with st.container(key="paso_datos"):
+            st.subheader(PASOS_TITULOS["datos"])
             if tipo_evento in TIPOS_CON_CHARLAS:
-                campo_obligatorio_ok = bool(titulo_evento.strip())
-                mensaje_falta = "El campo 'Título del evento' es obligatorio."
+                titulo_evento = st.text_input("Título del evento", key="titulo", placeholder="Ej. Manejo Reproductivo Bovino")
+                fecha = st.text_input("Fecha", key="fecha", placeholder="Ej. 24 de Septiembre de 2026")
+                hora = st.text_input("Hora", key="hora", placeholder="Ej. 3:00 p.m.")
+                lugar = st.text_input("Lugar", key="lugar", placeholder="Ej. Auditorio Central")
+                for etiqueta_o, valor_o in (("Título del evento", titulo_evento), ("Fecha", fecha), ("Lugar", lugar)):
+                    _revisar_ortografia(etiqueta_o, valor_o, ort["datos"])
+                if not titulo_evento.strip():
+                    pendientes["datos"].append("escribe el título del evento")
             else:
-                campo_obligatorio_ok = bool(descripcion_promocion.strip())
-                mensaje_falta = "El campo 'Describa en qué consiste la promoción' es obligatorio."
-
-            if not campo_obligatorio_ok:
-                st.error(mensaje_falta)
-            elif not categoria:
-                st.error("Selecciona al menos una Línea de negocio.")
-            elif errores_ortografia and not omitir_ortografia:
-                st.error("No se generó: corrige la ortografía de los campos marcados (o marca «Omitir la revisión ortográfica»).")
-            else:
-                OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-                patas = []
-                for tipo_pata, archivos_pata in (("Apoya", archivos_apoyan), ("Invita", archivos_invitan)):
-                    if not archivos_pata:
-                        continue
-                    carpeta_aliados = UPLOADS_DIR / "aliados"
-                    carpeta_aliados.mkdir(parents=True, exist_ok=True)
-                    rutas = []
-                    for subido in archivos_pata:
-                        ruta_logo = carpeta_aliados / f"{tipo_pata.lower()}_{subido.name}"
-                        ruta_logo.write_bytes(subido.getvalue())
-                        rutas.append(str(ruta_logo))
-                    patas.append({"tipo": tipo_pata, "logos": rutas})
-
-                if tipo_evento in TIPOS_CON_CHARLAS:
-                    palabra_categoria, palabra_titulo = HEADLINE_POR_TIPO_EVENTO[tipo_evento]
-                    tema_evento = titulo_evento
-                    fecha_texto = [v for v in (fecha, hora, lugar) if v]
-                else:
-                    palabra_categoria, palabra_titulo = HEADLINE_POR_ACTIVACION.get(
-                        tipo_activacion, ("Actividad", "Promocional"),
-                    )
-                    tema_evento = descripcion_promocion
-                    fecha_texto = [
-                        v for v in (
-                            f"Vigente del {fecha_inicio_promo.strftime('%d/%m/%Y')}" if fecha_inicio_promo else "",
-                            f"al {fecha_fin_promo.strftime('%d/%m/%Y')}" if fecha_fin_promo else "",
-                        ) if v
-                    ]
-
-                payload: Dict[str, Any] = {
-                    "marca": marca,
-                    "categoria": categoria,
-                    "palabra_categoria": palabra_categoria,
-                    "palabra_titulo": palabra_titulo,
-                    "tema_evento": tema_evento,
-                    "fecha_texto": fecha_texto,
-                    "ponentes": ponentes,
-                    "apoyos_texto": apoyos_texto,
-                    # Metadata administrativa del formulario - no se dibuja en la pieza.
-                    "marca_lider": marca_lider_otro if marca_lider == "Otro" else marca_lider,
-                    "centro_operativo": centro_operativo,
-                    "observaciones": observaciones,
-                }
-                if fondo_elegido:
-                    payload["background_file"] = fondo_elegido
-                if sub_linea:
-                    payload["sub_linea"] = sub_linea
-                if patas:
-                    payload["patas"] = patas
-                if tipo_evento == "Actividad Promocional":
-                    payload["tipo_activacion"] = tipo_activacion
-                    payload["unidades_disponibles"] = unidades_disponibles
-
-                nombre_archivo = f"invitacion_{int(time.time() * 1000)}.png"
-                destino = OUTPUT_DIR / nombre_archivo
-
-                try:
-                    ruta, duracion_ms, mensajes = _renderizar_invitacion(payload, destino)
-                    st.session_state["ultimo_resultado"] = {
-                        "ruta": str(ruta), "duracion_ms": duracion_ms, "mensajes": mensajes,
-                    }
-                except Exception as e:
-                    st.error(f"No se pudo generar la invitación: {type(e).__name__}: {e}")
-                    st.session_state["ultimo_resultado"] = None
-
-        resultado = st.session_state.get("ultimo_resultado")
-        if resultado:
-            st.image(resultado["ruta"], width="stretch", caption="Vista previa (1080 x 1920 px)")
-            st.metric("Tiempo de renderizado", f"{resultado['duracion_ms']:.1f} ms")
-            _mostrar_mensajes_capturados(resultado["mensajes"])
-
-            with open(resultado["ruta"], "rb") as f:
-                st.download_button(
-                    "⬇️ Descargar PNG",
-                    data=f.read(),
-                    file_name=Path(resultado["ruta"]).name,
-                    mime="image/png",
-                    width="stretch",
+                tipo_activacion = st.selectbox("Seleccione el tipo de activación", TIPOS_ACTIVACION, key="tipo_activacion")
+                descripcion_promocion = st.text_area(
+                    "Describa en qué consiste la promoción", key="descripcion_promocion",
+                    placeholder=(
+                        'Ej. "Por la compra de X unidades, lleva Y gratis" o "Nuestros expertos estarán '
+                        'con nosotros, visítanos para asesorarte. Tendremos regalos y sorpresas por tu '
+                        'compra en la marca."'
+                    ),
                 )
-        else:
-            st.info("Completa el formulario y presiona 'Generar Invitación' para ver la vista previa aquí.")
+                st.caption("Este texto queda sujeto a validación humana antes de publicarse.")
+                _revisar_ortografia("Descripción de la promoción", descripcion_promocion, ort["datos"])
+                if not descripcion_promocion.strip():
+                    pendientes["datos"].append("describe en qué consiste la promoción")
+                col_fi, col_ff = st.columns(2)
+                fecha_inicio_promo = col_fi.date_input("Fecha inicial de la promoción", key="fecha_inicio_promo")
+                fecha_fin_promo = col_ff.date_input("Fecha final de la promoción", key="fecha_fin_promo")
+                unidades_disponibles = st.text_area(
+                    "Unidades disponibles de cada referencia involucrada", key="unidades_disponibles",
+                    placeholder="Ej. Ref. 1234 - 500 unidades; Ref. 5678 - 300 unidades",
+                )
+                st.caption("Dato administrativo — no se imprime en la pieza.")
+            _cierre_ortografia("datos", ort, pendientes)
+
+        # ---------------- Paso: charlas (solo Charla Maestra / Dia de Campo) ----------------
+        ponentes: List[Dict[str, Any]] = []
+        if "charlas" in pasos:
+            with st.container(key="paso_charlas"):
+                st.subheader(PASOS_TITULOS["charlas"])
+                num_charlas = st.radio(
+                    "¿Cuántas charlas tendrá el evento?", list(range(1, MAX_CHARLAS + 1)),
+                    key="num_charlas", horizontal=True,
+                )
+                st.caption("Si el evento tiene menos charlas, deja en blanco el nombre del expositor de las que no apliquen.")
+                for i in range(int(num_charlas)):
+                    with st.expander(f"Charla {i + 1}", expanded=True):
+                        titulo_charla = st.text_input("Título de la charla", key=f"charla_{i}_titulo")
+                        _revisar_ortografia(f"Título de la charla {i + 1}", titulo_charla, ort["charlas"])
+                        expositor = st.text_input("Nombre del expositor", key=f"charla_{i}_expositor")
+                        empresa_expositor = st.text_input("Empresa del expositor", key=f"charla_{i}_empresa")
+                        if expositor.strip():
+                            ponentes.append({
+                                "name": expositor, "role": "", "empresa": empresa_expositor, "tema": titulo_charla,
+                            })
+                _cierre_ortografia("charlas", ort, pendientes)
+
+        # ---------------- Paso: imagen de fondo ----------------
+        with st.container(key="paso_fondo"):
+            st.subheader(PASOS_TITULOS["fondo"])
+            fondos_disponibles = _listar_fondos()
+            fondo_elegido = st.session_state.get("fondo_elegido")
+            if fondo_elegido and not (BACKGROUNDS_DIR / fondo_elegido).is_file():
+                fondo_elegido = None
+            if fondo_elegido:
+                miniatura_actual = _miniatura_fondo(BACKGROUNDS_DIR / fondo_elegido)
+                if miniatura_actual:
+                    st.image(miniatura_actual, width=140)
+                st.caption(f"Fondo elegido: {fondo_elegido}")
+            else:
+                st.caption("Automático: se elige al azar uno acorde a la línea de negocio. Elige uno de la galería para controlarlo.")
+            palabras_linea = [p for linea in categoria for p in PALABRAS_FONDO_POR_LINEA.get(linea, [])]
+            fondos_de_la_linea = [f for f in fondos_disponibles if any(p in f.stem.lower() for p in palabras_linea)]
+            mostrar_todos = st.checkbox("Mostrar fondos de todas las líneas", key="fondos_todos")
+            if mostrar_todos or not fondos_de_la_linea:
+                fondos_galeria = fondos_disponibles
+                if not mostrar_todos:
+                    st.caption("No hay fondos específicos para la línea elegida; se muestran todos.")
+            else:
+                fondos_galeria = fondos_de_la_linea
+            if fondo_elegido and (BACKGROUNDS_DIR / fondo_elegido) not in fondos_galeria:
+                st.warning("El fondo elegido no corresponde a la línea de negocio seleccionada.")
+            with st.expander(f"Elegir de la galería ({len(fondos_galeria)} fondos)"):
+                st.button("Automático (según línea de negocio)", key="fondo_auto", on_click=_elegir_fondo, args=(None,))
+                columnas_fondos = st.columns(3)
+                for i, ruta_fondo in enumerate(fondos_galeria):
+                    with columnas_fondos[i % 3]:
+                        miniatura = _miniatura_fondo(ruta_fondo)
+                        if miniatura:
+                            st.image(miniatura, width="stretch")
+                        st.caption(ruta_fondo.stem.replace("_", " "))
+                        st.button("Usar este", key=f"fondo_{ruta_fondo.name}", on_click=_elegir_fondo, args=(ruta_fondo.name,))
+
+        # ---------------- Paso: pata de patrocinadores ----------------
+        with st.container(key="paso_pata"):
+            st.subheader(PASOS_TITULOS["pata"])
+            st.caption("Todo es opcional: sube logos en «Apoyan», en «Invitan» o en ambos; solo aparece el grupo que tenga logos.")
+            archivos_apoyan = st.file_uploader(
+                "Logos que APOYAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_apoyan",
+            )
+            archivos_invitan = st.file_uploader(
+                "Logos que INVITAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_invitan",
+            )
+            apoyos_texto = st.text_input(
+                "Texto de apoyo (solo se usa si no subes logos)",
+                key="apoyos_texto", placeholder="Ej. Con el apoyo de Contegral",
+            )
+            _revisar_ortografia("Texto de apoyo", apoyos_texto, ort["pata"])
+            _cierre_ortografia("pata", ort, pendientes)
+
+        # ---------------- Paso: informacion administrativa ----------------
+        with st.container(key="paso_admin"):
+            st.subheader(PASOS_TITULOS["admin"])
+            centro_operativo = st.selectbox(
+                "Centro Operativo", CENTROS_OPERATIVOS, index=None, placeholder="Selecciona la respuesta", key="centro_operativo",
+            )
+            if not centro_operativo:
+                pendientes["admin"].append("selecciona el Centro Operativo")
+            observaciones = st.text_area("Observaciones adicionales", key="observaciones")
+
+        # ---------------- Paso final: revision, generacion y vista previa ----------------
+        pendientes_total = [
+            f"{PASOS_TITULOS[n]}: {m}" for n in pasos if n != "final" for m in pendientes[n]
+        ]
+        with st.container(key="paso_final"):
+            col_res, col_img = st.columns([1, 1], gap="large")
+            with col_res:
+                st.subheader(PASOS_TITULOS["final"])
+                logos_apoyan_n, logos_invitan_n = len(archivos_apoyan or []), len(archivos_invitan or [])
+                es_charla = tipo_evento in TIPOS_CON_CHARLAS
+                resumen = [
+                    f"**Marca líder:** {(marca_lider_otro or 'Otro') if marca_lider == 'Otro' else marca_lider}",
+                    f"**Línea de negocio:** {', '.join(categoria) or '—'}",
+                    f"**Tipo de evento:** {tipo_evento}" + (f" · {tipo_activacion}" if tipo_activacion else ""),
+                    f"**{'Título' if es_charla else 'Promoción'}:** {titulo_evento if es_charla else descripcion_promocion}",
+                ]
+                if es_charla:
+                    resumen.append(f"**Fecha / hora / lugar:** {' · '.join(v for v in (fecha, hora, lugar) if v) or '—'}")
+                    resumen.append(f"**Expositores:** {', '.join(p['name'] for p in ponentes) or 'ninguno'}")
+                else:
+                    resumen.append(
+                        f"**Vigencia:** {fecha_inicio_promo.strftime('%d/%m/%Y')} al {fecha_fin_promo.strftime('%d/%m/%Y')}"
+                    )
+                texto_pata = f" · texto «{apoyos_texto}»" if apoyos_texto and not (logos_apoyan_n or logos_invitan_n) else ""
+                resumen += [
+                    f"**Fondo:** {fondo_elegido or 'automático'}",
+                    f"**Pata:** {logos_apoyan_n} logo(s) que apoyan · {logos_invitan_n} logo(s) que invitan{texto_pata}",
+                    f"**Centro Operativo:** {centro_operativo or '—'}",
+                ]
+                st.markdown("\n".join(f"- {linea}" for linea in resumen))
+
+                if pendientes_total:
+                    st.error("Faltan datos para generar:\n\n" + "\n".join(f"- {m}" for m in pendientes_total))
+                generar = st.button(
+                    "🎨 Generar invitación", type="primary", disabled=bool(pendientes_total), width="stretch",
+                )
+                st.button("↺ Crear otra invitación desde cero", key="nav_reiniciar", on_click=_reiniciar, width="stretch")
+
+            with col_img:
+                if generar:
+                    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+                    patas = []
+                    for tipo_pata, archivos_pata in (("Apoya", archivos_apoyan), ("Invita", archivos_invitan)):
+                        if not archivos_pata:
+                            continue
+                        carpeta_aliados = UPLOADS_DIR / "aliados"
+                        carpeta_aliados.mkdir(parents=True, exist_ok=True)
+                        rutas = []
+                        for subido in archivos_pata:
+                            ruta_logo = carpeta_aliados / f"{tipo_pata.lower()}_{subido.name}"
+                            ruta_logo.write_bytes(subido.getvalue())
+                            rutas.append(str(ruta_logo))
+                        patas.append({"tipo": tipo_pata, "logos": rutas})
+
+                    if es_charla:
+                        palabra_categoria, palabra_titulo = HEADLINE_POR_TIPO_EVENTO[tipo_evento]
+                        tema_evento = titulo_evento
+                        fecha_texto = [v for v in (fecha, hora, lugar) if v]
+                    else:
+                        palabra_categoria, palabra_titulo = HEADLINE_POR_ACTIVACION.get(
+                            tipo_activacion, ("Actividad", "Promocional"),
+                        )
+                        tema_evento = descripcion_promocion
+                        fecha_texto = [
+                            v for v in (
+                                f"Vigente del {fecha_inicio_promo.strftime('%d/%m/%Y')}" if fecha_inicio_promo else "",
+                                f"al {fecha_fin_promo.strftime('%d/%m/%Y')}" if fecha_fin_promo else "",
+                            ) if v
+                        ]
+
+                    payload: Dict[str, Any] = {
+                        "marca": marca,
+                        "categoria": categoria,
+                        "palabra_categoria": palabra_categoria,
+                        "palabra_titulo": palabra_titulo,
+                        "tema_evento": tema_evento,
+                        "fecha_texto": fecha_texto,
+                        "ponentes": ponentes,
+                        "apoyos_texto": apoyos_texto,
+                        # Metadata administrativa del formulario - no se dibuja en la pieza.
+                        "marca_lider": marca_lider_otro if marca_lider == "Otro" else marca_lider,
+                        "centro_operativo": centro_operativo,
+                        "observaciones": observaciones,
+                    }
+                    if fondo_elegido:
+                        payload["background_file"] = fondo_elegido
+                    if sub_linea:
+                        payload["sub_linea"] = sub_linea
+                    if patas:
+                        payload["patas"] = patas
+                    if tipo_evento == "Actividad Promocional":
+                        payload["tipo_activacion"] = tipo_activacion
+                        payload["unidades_disponibles"] = unidades_disponibles
+
+                    destino = OUTPUT_DIR / f"invitacion_{int(time.time() * 1000)}.png"
+                    try:
+                        ruta, duracion_ms, mensajes = _renderizar_invitacion(payload, destino)
+                        st.session_state["ultimo_resultado"] = {
+                            "ruta": str(ruta), "duracion_ms": duracion_ms, "mensajes": mensajes,
+                        }
+                    except Exception as e:
+                        st.error(f"No se pudo generar la invitación: {type(e).__name__}: {e}")
+                        st.session_state["ultimo_resultado"] = None
+
+                resultado = st.session_state.get("ultimo_resultado")
+                if resultado:
+                    st.image(resultado["ruta"], width="stretch", caption="Vista previa (1080 x 1920 px)")
+                    _mostrar_mensajes_capturados(resultado["mensajes"])
+                    with open(resultado["ruta"], "rb") as f:
+                        st.download_button(
+                            "⬇️ Descargar PNG", data=f.read(), file_name=Path(resultado["ruta"]).name,
+                            mime="image/png", width="stretch",
+                        )
+                else:
+                    st.info("Aquí aparecerá la invitación cuando presiones «Generar invitación».")
+
+        # ---------------- Navegacion ----------------
+        st.divider()
+        if paso != "final" and pendientes[paso]:
+            st.caption("Para continuar: " + " · ".join(pendientes[paso]))
+        nav_ant, nav_sig = st.columns(2)
+        if idx > 0:
+            nav_ant.button("← Anterior", key="nav_ant", on_click=_ir_a, args=(pasos[idx - 1],), width="stretch")
+        if paso != "final":
+            nav_sig.button(
+                "Siguiente →" if pasos[idx + 1] != "final" else "Revisar y generar →", key="nav_sig", type="primary",
+                disabled=bool(pendientes[paso]), on_click=_ir_a, args=(pasos[idx + 1],), width="stretch",
+            )
 
 
 # ---------------------------------------------------------------------------
