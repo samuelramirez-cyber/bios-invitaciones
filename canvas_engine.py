@@ -623,15 +623,18 @@ class InvitationCanvasBuilder:
                 self.draw_speaker_card(p, 0, int(y), int(card_width), accent_color, measure_only=True, **fuentes) - int(y)
                 for p in fila
             )
+            # Una fila incompleta (ej. el 3.er ponente solo) queda centrada.
+            ancho_fila = len(fila) * card_width + (len(fila) - 1) * gap
+            x_inicio = margin + ((self.width - 2 * margin) - ancho_fila) / 2
             if not measure_only:
                 for idx, ponente in enumerate(fila):
                     self.draw_speaker_card(
-                        ponente, int(margin + idx * (card_width + gap)), int(y), int(card_width), accent_color,
+                        ponente, int(x_inicio + idx * (card_width + gap)), int(y), int(card_width), accent_color,
                         min_height=alto_fila, **fuentes,
                     )
             info = {
                 "last_row_top": int(y), "last_row_bottom": int(y + alto_fila),
-                "last_row_x0": int(margin), "last_row_x1": int(margin + len(fila) * card_width + (len(fila) - 1) * gap),
+                "last_row_x0": int(x_inicio), "last_row_x1": int(x_inicio + ancho_fila),
             }
             y += alto_fila + gap
         info["bottom"] = int(y - gap)
