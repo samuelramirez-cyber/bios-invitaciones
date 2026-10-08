@@ -409,8 +409,8 @@ with tab_generar:
         with st.container(key="paso_pata"):
             st.subheader(PASOS_TITULOS["pata"])
             st.caption(
-                "Todo es opcional. Cada grupo puede llevar logos, un nombre en texto o ambos; "
-                "solo aparece el grupo que tenga contenido (si solo llenas «Invitan», sale solo «Invita»)."
+                "Obligatorio: al menos una marca que apoya o que invita. Cada grupo puede llevar logos, un nombre "
+                "en texto o ambos; solo aparece el grupo que tenga contenido (si solo llenas «Invitan», sale solo «Invita»)."
             )
             archivos_apoyan = st.file_uploader(
                 "Logos que APOYAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_apoyan",
@@ -420,6 +420,8 @@ with tab_generar:
                 "Logos que INVITAN", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="logos_invitan",
             )
             texto_invitan = st.text_input("Nombre de quien INVITA (texto, opcional)", key="texto_invitan", placeholder="Ej. Veterinaria Agrollanos")
+            if not (archivos_apoyan or archivos_invitan or texto_apoyan.strip() or texto_invitan.strip()):
+                pendientes["pata"].append("agrega al menos una marca que apoya o invita (logo o nombre)")
 
         # ---------------- Paso: informacion administrativa ----------------
         with st.container(key="paso_admin"):
