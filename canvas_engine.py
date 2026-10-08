@@ -6,7 +6,7 @@ Composicion por capas con Pillow. Sin dependencias externas pesadas.
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from assets_manager import AssetRepository
 
@@ -86,39 +86,44 @@ class InvitationCanvasBuilder:
         self.draw = ImageDraw.Draw(self.image)
         return self
 
-    def apply_gradient_overlay(
-        self,
-        top_opacity: float = 0.6,
-        mid_opacity: float = 0.18,
-        bottom_opacity: float = 0.68,
-        mid_stop: float = 0.42,
-    ) -> "InvitationCanvasBuilder":
+    # Opacidad del negro por altura (fraccion del alto): oscuro arriba (bloque de
+    # titulo), foto limpia en el centro y cada vez mas oscuro hacia abajo (tarjetas,
+    # insignia Maestria y pata).
+    PERFIL_DEGRADADO = (
+        (0.00, 0.72), (0.20, 0.70), (0.30, 0.56), (0.40, 0.24), (0.52, 0.12),
+        (0.60, 0.30), (0.68, 0.62), (0.78, 0.80), (1.00, 0.90),
+    )
+
+    def apply_gradient_overlay(self, adaptativo: float = 0.25) -> "InvitationCanvasBuilder":
         """
-        Superpone un degradado vertical negro: oscuro arriba (legibilidad del
-        titulo), mas transparente en el medio (se ve la foto) y oscuro abajo
-        (legibilidad de tarjetas de ponentes/patrocinador). Replica el look
-        de las plantillas de referencia (mejor que un negro plano uniforme).
+        Degradado vertical negro con perfil fijo (PERFIL_DEGRADADO) mas un refuerzo
+        adaptativo: donde el fondo es claro (cielo, piel de cerdo, paja) se oscurece
+        un poco mas, hasta `adaptativo` de opacidad extra, para que el texto blanco
+        se lea con cualquier fotografia. La luminancia se mide por filas y se suaviza.
         """
         h = self.height
-        mid_y = int(h * mid_stop)
+        columna = self.image.convert("L").resize((9, h), Image.BOX).filter(ImageFilter.GaussianBlur(30))
+        luminancia = [columna.getpixel((4, y)) for y in range(h)]
+
+        def base(frac: float) -> float:
+            p = self.PERFIL_DEGRADADO
+            for (f0, a0), (f1, a1) in zip(p, p[1:]):
+                if frac <= f1:
+                    return a0 + (a1 - a0) * (frac - f0) / (f1 - f0)
+            return p[-1][1]
+
         alphas = []
         for y in range(h):
-            if y <= mid_y:
-                t = y / max(mid_y, 1)
-                a = top_opacity + (mid_opacity - top_opacity) * t
-            else:
-                t = (y - mid_y) / max(h - mid_y, 1)
-                a = mid_opacity + (bottom_opacity - mid_opacity) * t
-            alphas.append(int(255 * max(0.0, min(1.0, a))))
+            b0 = base(y / (h - 1))
+            claro = max(0.0, min(1.0, (luminancia[y] - 100) / 155))
+            a = b0 + adaptativo * claro * min(1.0, 0.35 + b0)
+            alphas.append(int(255 * min(0.93, a)))
 
-        gradient_row = Image.new("L", (1, h))
-        gradient_row.putdata(alphas)
-        alpha_mask = gradient_row.resize((self.width, h))
-
+        fila = Image.new("L", (1, h))
+        fila.putdata(alphas)
         overlay = Image.new("RGBA", self.image.size, (0, 0, 0, 255))
-        overlay.putalpha(alpha_mask)
-        merged = Image.alpha_composite(self.image.convert("RGBA"), overlay)
-        self.image = merged.convert("RGB")
+        overlay.putalpha(fila.resize((self.width, h)))
+        self.image = Image.alpha_composite(self.image.convert("RGBA"), overlay).convert("RGB")
         self.draw = ImageDraw.Draw(self.image)
         return self
 
@@ -294,7 +299,7 @@ class InvitationCanvasBuilder:
         gap_title: int = 38,
         gap_date: int = 22,
         max_width: int = 1000,
-        date_max_width: int = 400,
+        date_max_width: int = 430,
         strong_max_width: int = 330,
         strong_items: int = 1,
         text_color: Tuple[int, int, int] = (255, 255, 255),
@@ -436,55 +441,57 @@ class InvitationCanvasBuilder:
 
     def draw_event_title(
         self,
-        kicker: str,
-        title: str,
-        kicker_font: str,
-        title_font: str,
+        tema: str,
+        subtitulo: str,
+        tema_font: str,
+        subtitulo_font: str,
         accent: Tuple[int, int, int],
         top_y: int,
-        kicker_size: int = 50,
-        title_size: int = 52,
+        tema_size: int = 50,
+        subtitulo_size: int = 46,
         max_width: int = 800,
         text_color: Tuple[int, int, int] = (255, 255, 255),
     ) -> Dict[str, int]:
         """
-        Titulo centrado del evento: antetitulo opcional (mayusculas, color de
-        acento) sobre el titulo en blanco (se ajusta a `max_width`). Devuelve
-        {"bottom", "frame_y" (Y donde pasa el borde superior del marco),
-        "gap_x0", "gap_x1" (rango X que el marco deja abierto)}.
+        Titulo centrado del evento: el TEMA / nombre de la charla (mayusculas, color
+        de acento, hasta 2 lineas) y debajo el SUBTITULO que lo complementa (blanco,
+        se ajusta a `max_width`). Ambos son opcionales. Devuelve {"bottom", "frame_y"
+        (Y por donde pasa el borde superior del marco), "gap_x0", "gap_x1" (rango X
+        que el marco deja abierto)}.
         """
         cx = self.width / 2
         lineas: List[Tuple[str, ImageFont.ImageFont, Tuple[int, int, int]]] = []
-        if kicker and kicker.strip():
-            tam = kicker_size
-            fuente = self._load_font(kicker_font, tam)
-            texto = kicker.strip().upper()
-            while self.draw.textbbox((0, 0), texto, font=fuente)[2] > max_width and tam > 24:
+        if tema and tema.strip():
+            tam = tema_size
+            texto = tema.strip().upper()
+            while True:
+                fuente = self._load_font(tema_font, tam)
+                partes = self._wrap_lines(texto, fuente, max_width)
+                if len(partes) <= 2 or tam <= 30:
+                    break
                 tam -= 2
-                fuente = self._load_font(kicker_font, tam)
-            lineas.append((texto, fuente, accent))
-        f_title = self._load_font(title_font, title_size)
-        n_kicker = len(lineas)
-        for sub in self._wrap_lines(title.strip(), f_title, max_width):
-            lineas.append((sub, f_title, text_color))
+            lineas += [(p, fuente, accent) for p in partes]
+        n_tema = len(lineas)
+        if subtitulo and subtitulo.strip():
+            f_sub = self._load_font(subtitulo_font, subtitulo_size)
+            lineas += [(p, f_sub, text_color) for p in self._wrap_lines(subtitulo.strip(), f_sub, max_width)]
 
         y = top_y
         ancho_max = 0
         frame_y = top_y
+        ultimo_cap = 0
         for i, (texto, fuente, color) in enumerate(lineas):
             cap = self.draw.textbbox((0, 0), "H", font=fuente)
             cap_h = cap[3] - cap[1]
             b = self.draw.textbbox((0, 0), texto, font=fuente)
-            ancho = b[2] - b[0]
-            ancho_max = max(ancho_max, ancho)
-            self.draw.text((cx - ancho / 2 - b[0], y - cap[1]), texto, font=fuente, fill=color)
-            if i == n_kicker:
+            ancho_max = max(ancho_max, b[2] - b[0])
+            self.draw.text((cx - (b[2] - b[0]) / 2 - b[0], y - cap[1]), texto, font=fuente, fill=color)
+            if i == (n_tema if n_tema < len(lineas) else n_tema - 1):
                 frame_y = y + int(cap_h * 0.4)
             y += int(cap_h * 1.55)
             ultimo_cap = cap_h
-        bottom = y - int(ultimo_cap * 0.55)
         return {
-            "bottom": int(bottom), "frame_y": int(frame_y),
+            "bottom": int(y - int(ultimo_cap * 0.55)), "frame_y": int(frame_y),
             "gap_x0": int(cx - ancho_max / 2 - 26), "gap_x1": int(cx + ancho_max / 2 + 26),
         }
 
@@ -691,7 +698,8 @@ class InvitationCanvasBuilder:
         max_logo_height: int = 62,
         text_size: int = 25,
         box_fill: Tuple[int, int, int] = (240, 240, 240),
-        max_width: int = 820,
+        box_opacity: float = 0.9,
+        max_width: int = 880,
         header_height: int = 34,
         header_opacity: float = 0.75,
     ) -> int:
@@ -735,24 +743,28 @@ class InvitationCanvasBuilder:
             font_texto = self._load_font(label_font_path, int(text_size * f))
             paso_texto = int(text_size * f * 1.25)
             escalados, textos, anchos_grupo, altos = [], [], [], [int(44 * f)]
+            bases = []
             for etiqueta, logos, texto in grupos:
                 fila = []
                 for im in logos:
                     k = min(alto_logo / im.height, (alto_logo * 2.4) / im.width)
                     fila.append(im.resize((max(1, int(im.width * k)), max(1, int(im.height * k))), Image.LANCZOS))
-                lineas = self._wrap_lines(texto.upper(), font_texto, int(300 * f)) if texto else []
-                ancho_texto = max((self.draw.textbbox((0, 0), l, font=font_texto)[2] for l in lineas), default=0)
                 escalados.append(fila)
-                textos.append(lineas)
+                bl = self.draw.textbbox((0, 0), etiqueta, font=font_label)
+                bases.append((bl[2] - bl[0]) + sep_gap * 2 + 2 + sum(i.width for i in fila) + gap_logo * max(len(fila) - 1, 0) + (gap_logo if fila and texto else 0))
                 if fila:
                     altos.append(alto_logo)
+            # El texto usa todo el ancho que sobre en la caja: solo baja de linea si ya no cabe de lado.
+            n_con_texto = sum(1 for _, _, tx in grupos if tx)
+            disponible = max_width - 2 * pad_x - gap_grupo * (len(grupos) - 1) - sum(bases)
+            ancho_texto_max = max(int(220 * f), disponible // max(n_con_texto, 1))
+            for (etiqueta, logos, texto), base_w in zip(grupos, bases):
+                lineas = self._wrap_lines(texto.upper(), font_texto, ancho_texto_max) if texto else []
+                ancho_texto = max((self.draw.textbbox((0, 0), l, font=font_texto)[2] for l in lineas), default=0)
+                textos.append(lineas)
                 if lineas:
                     altos.append(paso_texto * len(lineas))
-                bl = self.draw.textbbox((0, 0), etiqueta, font=font_label)
-                elementos = len(fila) + (1 if lineas else 0)
-                anchos_grupo.append(
-                    (bl[2] - bl[0]) + sep_gap * 2 + 2 + sum(i.width for i in fila) + ancho_texto + gap_logo * (elementos - 1)
-                )
+                anchos_grupo.append(base_w + ancho_texto)
             box_w = sum(anchos_grupo) + gap_grupo * (len(grupos) - 1) + 2 * pad_x
             if box_w <= max_width or f <= 0.55:
                 break
@@ -790,16 +802,21 @@ class InvitationCanvasBuilder:
             ImageDraw.Draw(capa).rectangle(
                 [(marco_w * S3 - hueco) // 2, 0, (marco_w * S3 + hueco) // 2, 6 * S3 + 2], fill=(0, 0, 0, 0),
             )
+        ImageDraw.Draw(capa).rectangle(
+            [(box_x0 - marco_x0) * S3, marco_h * S3 - 8 * S3, (box_x0 + box_w - marco_x0) * S3, marco_h * S3], fill=(0, 0, 0, 0),
+        )
         capa = capa.resize((marco_w, marco_h), Image.LANCZOS)
         self.image.paste(capa, (marco_x0, marco_top), capa)
 
         if encabezado:
             self.image.paste(encabezado, (int((self.width - header_w) / 2), int(y_position)), encabezado)
 
-        self.draw = ImageDraw.Draw(self.image)
-        self.draw.rounded_rectangle(
-            [box_x0, box_y0, box_x0 + box_w, box_y0 + box_h], radius=int(16 * f), fill=tuple(box_fill),
+        caja = Image.new("RGBA", (box_w * S3, box_h * S3), (0, 0, 0, 0))
+        ImageDraw.Draw(caja).rounded_rectangle(
+            [0, 0, box_w * S3 - 1, box_h * S3 - 1], radius=int(16 * f) * S3,
+            fill=tuple(box_fill) + (int(255 * box_opacity),),
         )
+        self._componer_capa(caja.resize((box_w, box_h), Image.LANCZOS), box_x0, box_y0)
 
         x = box_x0 + pad_x
         hb = self.draw.textbbox((0, 0), "H", font=font_label)

@@ -95,6 +95,13 @@ PASOS_TITULOS = {
     "admin": "Información administrativa", "final": "Revisión y vista previa",
 }
 
+def _hora_12h(minutos: int) -> str:
+    h, m = divmod(minutos, 60)
+    return f"{(h % 12) or 12}:{m:02d} {'a.m.' if h < 12 else 'p.m.'}"
+
+
+HORAS_12H = [_hora_12h(m) for m in range(5 * 60, 22 * 60 + 1, 15)]
+
 CENTROS_OPERATIVOS = [
     "Envigado", "Itagüí", "Bogotá", "Mosquera", "Cartago",
     "Buga", "Neiva", "Bucaramanga", "Ciénaga de Oro",
@@ -299,7 +306,7 @@ with tab_generar:
             st.caption("Los eventos tipo Encuentro o Jornada no se gestionan por este formulario: van directo con los jefes de mercadeo.")
 
         # ---------------- Paso: datos del evento ----------------
-        titulo_evento = antetitulo = fecha = hora = direccion = lugar = ""
+        titulo_evento = subtitulo = fecha = hora = direccion = lugar = ""
         tipo_activacion = None
         descripcion_promocion = ""
         fecha_inicio_promo = fecha_fin_promo = None
@@ -308,21 +315,33 @@ with tab_generar:
         with st.container(key="paso_datos"):
             st.subheader(PASOS_TITULOS["datos"])
             if tipo_evento in TIPOS_CON_CHARLAS:
-                antetitulo = st.text_input(
-                    "Antetítulo (opcional)", key="antetitulo", placeholder="Ej. Ganadería de carne",
-                    help="Sale arriba del título, en mayúsculas y en el color de la línea de negocio.",
+                titulo_evento = st.text_input(
+                    "Nombre o tema de la charla", key="titulo", placeholder="Ej. Suplementación en verano",
+                    help="Es el título principal: sale en mayúsculas y en el color de la línea de negocio.",
                 )
-                titulo_evento = st.text_input("Título del evento", key="titulo", placeholder="Ej. Un negocio rentable")
+                subtitulo = st.text_input(
+                    "Subtítulo (opcional)", key="subtitulo", placeholder="Ej. Formas de afrontar el fenómeno del Niño",
+                    help="Complementa o amplía el tema. Sale debajo, en blanco.",
+                )
                 fecha = st.text_input("Fecha", key="fecha", placeholder="Ej. 24 de Septiembre de 2026")
-                hora = st.text_input("Hora", key="hora", placeholder="Ej. 3:00 p.m.")
+                col_h1, col_h2 = st.columns(2)
+                hora_inicio = col_h1.selectbox(
+                    "Hora de inicio", HORAS_12H, index=None, placeholder="Ej. 7:00 a.m.", key="hora_inicio",
+                )
+                hora_fin = col_h2.selectbox(
+                    "Hora de finalización (opcional)", HORAS_12H, index=None, placeholder="Ej. 9:00 a.m.", key="hora_fin",
+                )
+                hora = f"{hora_inicio} a {hora_fin}" if hora_inicio and hora_fin else (hora_inicio or "")
+                if hora_inicio and hora_fin and HORAS_12H.index(hora_fin) <= HORAS_12H.index(hora_inicio):
+                    pendientes["datos"].append("la hora de finalización debe ser posterior a la de inicio")
                 direccion = st.text_input("Dirección", key="direccion", placeholder="Ej. Carrera 20 # 20-1 Barrio Boyacá")
                 lugar = st.text_input("Lugar", key="lugar", placeholder="Ej. Comité de Ganaderos de Tame")
                 for etiqueta_o, valor_o in (
-                    ("Antetítulo", antetitulo), ("Título del evento", titulo_evento), ("Fecha", fecha),
+                    ("Nombre o tema de la charla", titulo_evento), ("Subtítulo", subtitulo), ("Fecha", fecha),
                 ):
                     _revisar_ortografia(etiqueta_o, valor_o, ort["datos"])
                 if not titulo_evento.strip():
-                    pendientes["datos"].append("escribe el título del evento")
+                    pendientes["datos"].append("escribe el nombre o tema de la charla")
             else:
                 tipo_activacion = st.selectbox("Seleccione el tipo de activación", TIPOS_ACTIVACION, key="tipo_activacion")
                 descripcion_promocion = st.text_area(
@@ -362,10 +381,12 @@ with tab_generar:
                         titulo_charla = st.text_input("Título de la charla", key=f"charla_{i}_titulo")
                         _revisar_ortografia(f"Título de la charla {i + 1}", titulo_charla, ort["charlas"])
                         expositor = st.text_input("Nombre del expositor", key=f"charla_{i}_expositor")
+                        cargo_expositor = st.text_input("Cargo del expositor", key=f"charla_{i}_cargo", placeholder="Ej. Médico veterinario")
+                        _revisar_ortografia(f"Cargo del expositor {i + 1}", cargo_expositor, ort["charlas"])
                         empresa_expositor = st.text_input("Empresa del expositor", key=f"charla_{i}_empresa")
                         if expositor.strip():
                             ponentes.append({
-                                "name": expositor, "role": "", "empresa": empresa_expositor, "tema": titulo_charla,
+                                "name": expositor, "role": cargo_expositor, "empresa": empresa_expositor, "tema": titulo_charla,
                             })
                 _cierre_ortografia("charlas", ort, pendientes)
 
@@ -446,7 +467,7 @@ with tab_generar:
                     f"**Marca líder:** {(marca_lider_otro or 'Otro') if marca_lider == 'Otro' else marca_lider}",
                     f"**Línea de negocio:** {', '.join(categoria) or '—'}",
                     f"**Tipo de evento:** {tipo_evento}" + (f" · {tipo_activacion}" if tipo_activacion else ""),
-                    f"**{'Título' if es_charla else 'Promoción'}:** {titulo_evento if es_charla else descripcion_promocion}",
+                    f"**{'Tema' if es_charla else 'Promoción'}:** {titulo_evento if es_charla else descripcion_promocion}{(' — ' + subtitulo) if es_charla and subtitulo.strip() else ''}",
                 ]
                 if es_charla:
                     resumen.append(f"**Fecha · hora · dirección · lugar:** {' · '.join(v for v in (fecha, hora, direccion, lugar) if v) or '—'}")
@@ -495,13 +516,13 @@ with tab_generar:
 
                     if es_charla:
                         palabra_categoria, palabra_titulo = HEADLINE_POR_TIPO_EVENTO[tipo_evento]
-                        tema_evento = titulo_evento
+                        tema_evento, subtitulo_pieza = titulo_evento, subtitulo.strip()
                         fecha_texto = [v for v in (fecha, hora, direccion.upper(), lugar) if v]
                     else:
                         palabra_categoria, palabra_titulo = HEADLINE_POR_ACTIVACION.get(
                             tipo_activacion, ("Actividad", "Promocional"),
                         )
-                        tema_evento = descripcion_promocion
+                        tema_evento, subtitulo_pieza = "", descripcion_promocion
                         fecha_texto = [
                             v for v in (
                                 f"Vigente del {fecha_inicio_promo.strftime('%d/%m/%Y')}" if fecha_inicio_promo else "",
@@ -515,6 +536,7 @@ with tab_generar:
                         "palabra_categoria": palabra_categoria,
                         "palabra_titulo": palabra_titulo,
                         "tema_evento": tema_evento,
+                        "subtitulo": subtitulo_pieza,
                         "fecha_texto": fecha_texto,
                         "ponentes": ponentes,
                         # Metadata administrativa del formulario - no se dibuja en la pieza.
@@ -524,8 +546,6 @@ with tab_generar:
                     }
                     if fondo_elegido:
                         payload["background_file"] = fondo_elegido
-                    if antetitulo.strip():
-                        payload["antetitulo"] = antetitulo.strip()
                     if sub_linea:
                         payload["sub_linea"] = [x.lower() for x in sub_linea]
                     if patas:

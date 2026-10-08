@@ -125,16 +125,16 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
         date_size=lockup["date_size"], icon_paths=iconos, icon_size=lockup["icon_size"],
     )
 
-    # --- Marco blanco abierto: el titulo del evento (antetitulo opcional en
-    # color de linea + titulo) va sobre el borde superior; las ponencias,
+    # --- Marco blanco abierto: el titulo del evento (tema en color de linea +
+    # subtitulo que lo complementa) va sobre el borde superior; las ponencias,
     # ancladas abajo, tapan el borde inferior. Todo queda "envuelto" por las lineas. ---
     marco = boxes["frame"]
     fx0, fx1 = marco["side_margin"], builder.width - marco["side_margin"]
     titulo = builder.draw_event_title(
-        payload.get("antetitulo", ""), payload["tema_evento"],
-        kicker_font=font_black, title_font=font_bold, accent=accent,
+        payload.get("tema_evento", ""), payload.get("subtitulo", ""),
+        tema_font=font_black, subtitulo_font=font_bold, accent=accent,
         top_y=lockup_bottom + marco["gap_after_lockup"],
-        kicker_size=marco["kicker_size"], title_size=marco["title_size"], max_width=fx1 - fx0 - 120,
+        tema_size=marco["kicker_size"], subtitulo_size=marco["title_size"], max_width=fx1 - fx0 - 120,
     )
     gap_top = (titulo["gap_x0"], titulo["gap_x1"])
 
