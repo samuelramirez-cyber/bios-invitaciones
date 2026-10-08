@@ -687,11 +687,13 @@ class InvitationCanvasBuilder:
         label_color: Tuple[int, int, int],
         header_logo: Optional[str] = None,
         label_font_path: str = str(DEFAULT_FONT_BOLD),
-        label_size: int = 52,
-        max_logo_height: int = 104,
-        text_size: int = 32,
-        box_fill: Tuple[int, int, int] = (247, 247, 247),
-        max_width: int = 940,
+        label_size: int = 38,
+        max_logo_height: int = 62,
+        text_size: int = 25,
+        box_fill: Tuple[int, int, int] = (240, 240, 240),
+        max_width: int = 820,
+        header_height: int = 34,
+        header_opacity: float = 0.75,
     ) -> int:
         """
         Pata de patrocinadores como en las piezas reales (assets/Templates/Patas/):
@@ -725,14 +727,14 @@ class InvitationCanvasBuilder:
             except (FileNotFoundError, OSError) as e:
                 print(f"[AVISO] No se pudo abrir el logo de encabezado '{header_logo}' ({e}); pata sin encabezado.")
 
-        pad_x, gap_logo, gap_grupo, sep_gap = 36, 30, 46, 22
+        pad_x, gap_logo, gap_grupo, sep_gap = 28, 24, 36, 16
         f = 1.0
         while True:
             alto_logo = int(max_logo_height * f)
             font_label = self._load_font(label_font_path, int(label_size * f))
             font_texto = self._load_font(label_font_path, int(text_size * f))
             paso_texto = int(text_size * f * 1.25)
-            escalados, textos, anchos_grupo, altos = [], [], [], [int(60 * f)]
+            escalados, textos, anchos_grupo, altos = [], [], [], [int(44 * f)]
             for etiqueta, logos, texto in grupos:
                 fila = []
                 for im in logos:
@@ -757,14 +759,15 @@ class InvitationCanvasBuilder:
             f -= 0.05
 
         alto_contenido = max(altos)
-        pad_y = int(28 * f)
+        pad_y = int(18 * f)
         box_h = alto_contenido + 2 * pad_y
         if encabezado:
-            kh = (70 * f) / encabezado.height
+            kh = (header_height * f) / encabezado.height
             encabezado = encabezado.resize((int(encabezado.width * kh), int(encabezado.height * kh)), Image.LANCZOS)
+            encabezado.putalpha(encabezado.getchannel("A").point(lambda a: int(a * header_opacity)))
         header_h = encabezado.height if encabezado else 0
         header_w = encabezado.width if encabezado else 0
-        gap_header = 16 if encabezado else 0
+        gap_header = 10 if encabezado else 0
 
         box_x0 = int((self.width - box_w) / 2)
         box_y0 = int(y_position + header_h + gap_header)
@@ -772,18 +775,18 @@ class InvitationCanvasBuilder:
 
         # Marco: rectangulo redondeado dibujado a 3x (bordes suaves). Arriba queda
         # abierto bajo el logo de encabezado; abajo lo tapa la caja de contenido.
-        marco_w = int(min(max(box_w + 300, header_w + 280), self.width - 80))
+        marco_w = int(min(max(box_w + 220, header_w + 200), self.width - 80))
         marco_x0 = int((self.width - marco_w) / 2)
         marco_top = int(y_position + header_h / 2) if encabezado else int(box_y0 - 20)
         marco_h = int(box_cy - marco_top)
         S3 = 3
         capa = Image.new("RGBA", (marco_w * S3, marco_h * S3), (0, 0, 0, 0))
         ImageDraw.Draw(capa).rounded_rectangle(
-            [0, 0, marco_w * S3 - 1, marco_h * S3 - 1], radius=34 * S3,
-            outline=tuple(frame_color) + (255,), width=3 * S3,
+            [0, 0, marco_w * S3 - 1, marco_h * S3 - 1], radius=26 * S3,
+            outline=tuple(frame_color) + (200,), width=2 * S3,
         )
         if encabezado:
-            hueco = (header_w + 36) * S3
+            hueco = (header_w + 28) * S3
             ImageDraw.Draw(capa).rectangle(
                 [(marco_w * S3 - hueco) // 2, 0, (marco_w * S3 + hueco) // 2, 6 * S3 + 2], fill=(0, 0, 0, 0),
             )
@@ -795,7 +798,7 @@ class InvitationCanvasBuilder:
 
         self.draw = ImageDraw.Draw(self.image)
         self.draw.rounded_rectangle(
-            [box_x0, box_y0, box_x0 + box_w, box_y0 + box_h], radius=int(20 * f), fill=tuple(box_fill),
+            [box_x0, box_y0, box_x0 + box_w, box_y0 + box_h], radius=int(16 * f), fill=tuple(box_fill),
         )
 
         x = box_x0 + pad_x
