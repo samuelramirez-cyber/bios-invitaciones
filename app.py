@@ -121,12 +121,12 @@ HEADLINE_POR_TIPO_EVENTO = {
     "Día de Campo": ("Día de", "Campo"),
 }
 HEADLINE_POR_ACTIVACION = {
-    "Día del pollito": ("Día", "del Pollito"),
-    "Día del ganadero": ("Día", "del Ganadero"),
-    "Día del acuicultor": ("Día", "del Acuicultor"),
+    "Día del pollito": ("Día del", "Pollito"),
+    "Día del ganadero": ("Día del", "Ganadero"),
+    "Día del acuicultor": ("Día del", "Acuicultor"),
     "Día del caballo (Cinta Azul)": ("Día del Caballo", "Cinta Azul"),
     "Día del caballo (Rodeo)": ("Día del Caballo", "Rodeo"),
-    "Día de lechón": ("Día de", "Lechón"),
+    "Día de lechón": ("Día del", "Lechón"),
     "Día del cerdo": ("Día del", "Cerdo"),
     "Día Contegral": ("Día", "Contegral"),
     "Día Finca": ("Día", "Finca"),
