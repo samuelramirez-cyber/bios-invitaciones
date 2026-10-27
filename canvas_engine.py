@@ -3,6 +3,7 @@ CanvasEngine - motor visual parametrico para invitaciones (WhatsApp).
 Composicion por capas con Pillow. Sin dependencias externas pesadas.
 """
 
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -145,21 +146,73 @@ class InvitationCanvasBuilder:
     # Texto adaptativo
     # ------------------------------------------------------------------
 
+    # Palabras que no deben quedar al final de una linea: articulos, preposiciones y
+    # conjunciones cortas se pegan a la palabra siguiente ("de alimento", "y recibe").
+    _PALABRAS_PEGADAS = frozenset(
+        "a al con de del e el en la las lo los o u un una y ni por para sin su sus tu tus mi mis que".split()
+    )
+
+    @classmethod
+    def _se_pega_a_la_siguiente(cls, palabra: str) -> bool:
+        p = palabra.lower().strip(".,;:!?()")
+        return p in cls._PALABRAS_PEGADAS or len(p) == 1 or re.fullmatch(r"[\d.,:/#-]+", p) is not None
+
+    @classmethod
+    def _unidades_de_texto(cls, texto: str) -> List[str]:
+        """Parte el texto en bloques que no se separan: un numero va con su unidad ("1 kg", "5 pollitos")."""
+        palabras = texto.split()
+        unidades: List[str] = []
+        i = 0
+        while i < len(palabras):
+            actual = [palabras[i]]
+            while i + 1 < len(palabras) and cls._se_pega_a_la_siguiente(actual[-1]):
+                i += 1
+                actual.append(palabras[i])
+            unidades.append(" ".join(actual))
+            i += 1
+        return unidades
+
     def _wrap_lines(self, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> List[str]:
-        palabras = text.split()
-        if not palabras:
+        """
+        Divide `text` en lineas de hasta `max_width` px sin cortar mal: numeros con su
+        unidad, articulos/preposiciones con la palabra que sigue, y las lineas se
+        reparten parejo (sin renglones sueltos de una palabra al final).
+        """
+        unidades = self._unidades_de_texto(text)
+        if not unidades:
             return [""]
-        lineas = []
-        actual = palabras[0]
-        for palabra in palabras[1:]:
-            candidata = f"{actual} {palabra}"
-            ancho = self.draw.textbbox((0, 0), candidata, font=font)[2]
-            if ancho <= max_width:
-                actual = candidata
-            else:
-                lineas.append(actual)
-                actual = palabra
-        lineas.append(actual)
+        largo = self.draw.textlength
+        # un bloque mas ancho que la caja se vuelve a separar en palabras
+        if any(largo(u, font=font) > max_width for u in unidades):
+            unidades = text.split()
+        anchos = [largo(u, font=font) for u in unidades]
+        espacio = largo(" ", font=font)
+
+        def codicioso(limite: float) -> List[List[int]]:
+            lineas, actual, ancho_actual = [], [], 0.0
+            for i, a in enumerate(anchos):
+                if actual and ancho_actual + espacio + a > limite:
+                    lineas.append(actual)
+                    actual, ancho_actual = [i], a
+                else:
+                    ancho_actual = ancho_actual + (espacio if actual else 0) + a
+                    actual.append(i)
+            lineas.append(actual)
+            return lineas
+
+        base = codicioso(max_width)
+        if len(base) > 1:
+            lo, hi = int(max(anchos)), int(max_width)
+            while lo < hi:
+                medio = (lo + hi) // 2
+                if len(codicioso(medio)) <= len(base):
+                    hi = medio
+                else:
+                    lo = medio + 1
+            base = codicioso(hi)
+        lineas = [" ".join(unidades[i] for i in idx) for idx in base]
+        if any(self.draw.textbbox((0, 0), l, font=font)[2] > max_width + 1 for l in lineas) and len(unidades) > 1:
+            lineas = [" ".join(unidades[i] for i in idx) for idx in codicioso(max_width)]
         return lineas
 
     def _block_height(self, lineas: List[str], font: ImageFont.FreeTypeFont, spacing: int) -> int:
@@ -299,7 +352,7 @@ class InvitationCanvasBuilder:
         gap_title: int = 38,
         gap_date: int = 22,
         max_width: int = 1000,
-        date_max_width: int = 430,
+        date_max_width: int = 470,
         strong_max_width: int = 330,
         strong_items: int = 1,
         text_color: Tuple[int, int, int] = (255, 255, 255),

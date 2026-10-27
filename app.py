@@ -106,6 +106,25 @@ MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
          "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 
 
+_CONECTORES = {"de", "del", "la", "las", "los", "el", "y", "e", "en", "a", "al"}
+
+
+def _normalizar_caso(texto: str) -> str:
+    """Direcciones y lugares en tipo normal: si llegan TODO EN MAYUSCULAS o todo en minusculas
+    se pasan a 'Carrera 20 # 20-1' / 'San Pedro de los Milagros'; si ya vienen mezclados, se respetan."""
+    t = " ".join((texto or "").split())
+    if t and any(c.isalpha() for c in t) and (t == t.upper() or t == t.lower()):
+        palabras = t.lower().split()
+        t = " ".join(p if (i > 0 and p in _CONECTORES) else p[:1].upper() + p[1:] for i, p in enumerate(palabras))
+    return t
+
+
+def _bloque_lugar(lugar: str, direccion: str, ciudad: str) -> list:
+    """Lineas del bloque de fecha: sitio, direccion y ciudad/departamento, cada una aparte."""
+    municipio_y_depto = [_normalizar_caso(x) for x in (ciudad or "").split(",")]
+    return [v for v in (_normalizar_caso(lugar), _normalizar_caso(direccion), *municipio_y_depto) if v]
+
+
 def _fecha_vigencia(ini, fin) -> str:
     """Un solo dia -> '28 de noviembre de 2026'; rango -> 'Del 28 al 30 de noviembre de 2026'."""
     if fin is None or fin == ini:
@@ -319,7 +338,7 @@ with tab_generar:
             st.caption("Los eventos tipo Encuentro o Jornada no se gestionan por este formulario: van directo con los jefes de mercadeo.")
 
         # ---------------- Paso: datos del evento ----------------
-        titulo_evento = subtitulo = fecha = hora = direccion = lugar = ""
+        titulo_evento = subtitulo = fecha = hora = direccion = lugar = ciudad = ""
         tipo_activacion = None
         descripcion_promocion = ""
         fecha_inicio_promo = fecha_fin_promo = None
@@ -347,8 +366,9 @@ with tab_generar:
                 hora = f"{hora_inicio} a {hora_fin}" if hora_inicio and hora_fin else (hora_inicio or "")
                 if hora_inicio and hora_fin and HORAS_12H.index(hora_fin) <= HORAS_12H.index(hora_inicio):
                     pendientes["datos"].append("la hora de finalización debe ser posterior a la de inicio")
+                lugar = st.text_input("Lugar (nombre del sitio)", key="lugar", placeholder="Ej. Comité de Ganaderos de Tame")
                 direccion = st.text_input("Dirección", key="direccion", placeholder="Ej. Carrera 20 # 20-1 Barrio Boyacá")
-                lugar = st.text_input("Lugar", key="lugar", placeholder="Ej. Comité de Ganaderos de Tame")
+                ciudad = st.text_input("Municipio y departamento", key="ciudad", placeholder="Ej. Tame, Arauca")
                 for etiqueta_o, valor_o in (
                     ("Nombre o tema de la charla", titulo_evento), ("Subtítulo", subtitulo), ("Fecha", fecha),
                 ):
@@ -374,8 +394,9 @@ with tab_generar:
                 fecha_fin_promo = col_ff.date_input("Fecha final de la promoción", key="fecha_fin_promo")
                 if fecha_fin_promo < fecha_inicio_promo:
                     pendientes["datos"].append("la fecha final no puede ser anterior a la inicial")
+                lugar = st.text_input("Lugar (opcional, nombre del sitio)", key="lugar", placeholder="Ej. Agropecuaria La Gran Vía")
                 direccion = st.text_input("Dirección (opcional)", key="direccion", placeholder="Ej. Carrera 4 N 2-37")
-                lugar = st.text_input("Lugar (opcional)", key="lugar", placeholder="Ej. Labateca, Norte de Santander")
+                ciudad = st.text_input("Municipio y departamento (opcional)", key="ciudad", placeholder="Ej. Labateca, Norte de Santander")
                 unidades_disponibles = st.text_area(
                     "Unidades disponibles de cada referencia involucrada", key="unidades_disponibles",
                     placeholder="Ej. Ref. 1234 - 500 unidades; Ref. 5678 - 300 unidades",
@@ -487,11 +508,11 @@ with tab_generar:
                     f"**{'Tema' if es_charla else 'Promoción'}:** {titulo_evento if es_charla else descripcion_promocion}{(' — ' + subtitulo) if es_charla and subtitulo.strip() else ''}",
                 ]
                 if es_charla:
-                    resumen.append(f"**Fecha · hora · dirección · lugar:** {' · '.join(v for v in (fecha, hora, direccion, lugar) if v) or '—'}")
+                    resumen.append(f"**Fecha · hora · lugar:** {' · '.join(v for v in (fecha, hora, *_bloque_lugar(lugar, direccion, ciudad)) if v) or '—'}")
                     resumen.append(f"**Expositores:** {', '.join(p['name'] for p in ponentes) or 'ninguno'}")
                 else:
                     resumen.append(f"**Fecha:** {_fecha_vigencia(fecha_inicio_promo, fecha_fin_promo)}")
-                    resumen.append(f"**Dirección · lugar:** {' · '.join(v for v in (direccion, lugar) if v) or '—'}")
+                    resumen.append(f"**Lugar:** {' · '.join(_bloque_lugar(lugar, direccion, ciudad)) or '—'}")
                 def _resumen_grupo(archivos, texto):
                     partes = ([f"{len(archivos)} logo(s)"] if archivos else []) + ([f"«{texto.strip()}»"] if texto.strip() else [])
                     return " + ".join(partes) or "—"
@@ -533,15 +554,13 @@ with tab_generar:
                     if es_charla:
                         palabra_categoria, palabra_titulo = HEADLINE_POR_TIPO_EVENTO[tipo_evento]
                         tema_evento, subtitulo_pieza = titulo_evento, subtitulo.strip()
-                        fecha_texto = [v for v in (fecha, hora, direccion.upper(), lugar) if v]
+                        fecha_texto = [v for v in (fecha, hora, *_bloque_lugar(lugar, direccion, ciudad)) if v]
                     else:
                         palabra_categoria, palabra_titulo = HEADLINE_POR_ACTIVACION.get(
                             tipo_activacion, ("Actividad", "Promocional"),
                         )
                         tema_evento, subtitulo_pieza = "", descripcion_promocion
-                        fecha_texto = [
-                            v for v in (_fecha_vigencia(fecha_inicio_promo, fecha_fin_promo), direccion.upper(), lugar) if v
-                        ]
+                        fecha_texto = [_fecha_vigencia(fecha_inicio_promo, fecha_fin_promo), *_bloque_lugar(lugar, direccion, ciudad)]
 
                     payload: Dict[str, Any] = {
                         "marca": marca,

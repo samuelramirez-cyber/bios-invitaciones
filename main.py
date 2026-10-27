@@ -207,7 +207,6 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
             grupos_pata, y_position=max(y + 30, sponsor_box["y"]),
             frame_color=(255, 255, 255) if es_gris else accent,
             label_color=CATEGORY_COLORS["porcicola"] if es_gris else accent,
-            header_logo=builder.asset_repo.get_logo("grupo_bios"),
             label_font_path=font_bold,
         )
 
