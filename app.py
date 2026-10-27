@@ -102,6 +102,19 @@ def _hora_12h(minutos: int) -> str:
 
 HORAS_12H = [_hora_12h(m) for m in range(5 * 60, 22 * 60 + 1, 15)]
 
+MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+         "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def _fecha_vigencia(ini, fin) -> str:
+    """Un solo dia -> '28 de noviembre de 2026'; rango -> 'Del 28 al 30 de noviembre de 2026'."""
+    if fin is None or fin == ini:
+        return f"{ini.day} de {MESES[ini.month - 1]} de {ini.year}"
+    if (ini.month, ini.year) == (fin.month, fin.year):
+        return f"Del {ini.day} al {fin.day} de {MESES[fin.month - 1]} de {fin.year}"
+    return f"Del {ini.day} de {MESES[ini.month - 1]} al {fin.day} de {MESES[fin.month - 1]} de {fin.year}"
+
+
 CENTROS_OPERATIVOS = [
     "Envigado", "Itagüí", "Bogotá", "Mosquera", "Cartago",
     "Buga", "Neiva", "Bucaramanga", "Ciénaga de Oro",
@@ -316,11 +329,11 @@ with tab_generar:
             st.subheader(PASOS_TITULOS["datos"])
             if tipo_evento in TIPOS_CON_CHARLAS:
                 titulo_evento = st.text_input(
-                    "Nombre o tema de la charla", key="titulo", placeholder="Ej. Suplementación en verano",
+                    "Nombre o tema de la charla", key="titulo", placeholder="Ej. Suplementación en verano", max_chars=70,
                     help="Es el título principal: sale en mayúsculas y en el color de la línea de negocio.",
                 )
                 subtitulo = st.text_input(
-                    "Subtítulo (opcional)", key="subtitulo", placeholder="Ej. Formas de afrontar el fenómeno del Niño",
+                    "Subtítulo (opcional)", key="subtitulo", placeholder="Ej. Formas de afrontar el fenómeno del Niño", max_chars=100,
                     help="Complementa o amplía el tema. Sale debajo, en blanco.",
                 )
                 fecha = st.text_input("Fecha", key="fecha", placeholder="Ej. 24 de Septiembre de 2026")
@@ -345,7 +358,7 @@ with tab_generar:
             else:
                 tipo_activacion = st.selectbox("Seleccione el tipo de activación", TIPOS_ACTIVACION, key="tipo_activacion")
                 descripcion_promocion = st.text_area(
-                    "Describa en qué consiste la promoción", key="descripcion_promocion",
+                    "Describa en qué consiste la promoción", key="descripcion_promocion", max_chars=200,
                     placeholder=(
                         'Ej. "Por la compra de X unidades, lleva Y gratis" o "Nuestros expertos estarán '
                         'con nosotros, visítanos para asesorarte. Tendremos regalos y sorpresas por tu '
@@ -359,6 +372,10 @@ with tab_generar:
                 col_fi, col_ff = st.columns(2)
                 fecha_inicio_promo = col_fi.date_input("Fecha inicial de la promoción", key="fecha_inicio_promo")
                 fecha_fin_promo = col_ff.date_input("Fecha final de la promoción", key="fecha_fin_promo")
+                if fecha_fin_promo < fecha_inicio_promo:
+                    pendientes["datos"].append("la fecha final no puede ser anterior a la inicial")
+                direccion = st.text_input("Dirección (opcional)", key="direccion", placeholder="Ej. Carrera 4 N 2-37")
+                lugar = st.text_input("Lugar (opcional)", key="lugar", placeholder="Ej. Labateca, Norte de Santander")
                 unidades_disponibles = st.text_area(
                     "Unidades disponibles de cada referencia involucrada", key="unidades_disponibles",
                     placeholder="Ej. Ref. 1234 - 500 unidades; Ref. 5678 - 300 unidades",
@@ -378,7 +395,7 @@ with tab_generar:
                 st.caption("Si el evento tiene menos charlas, deja en blanco el nombre del expositor de las que no apliquen.")
                 for i in range(int(num_charlas)):
                     with st.expander(f"Charla {i + 1}", expanded=True):
-                        titulo_charla = st.text_input("Título de la charla", key=f"charla_{i}_titulo")
+                        titulo_charla = st.text_input("Título de la charla", key=f"charla_{i}_titulo", max_chars=90)
                         _revisar_ortografia(f"Título de la charla {i + 1}", titulo_charla, ort["charlas"])
                         expositor = st.text_input("Nombre del expositor", key=f"charla_{i}_expositor")
                         cargo_expositor = st.text_input("Cargo del expositor", key=f"charla_{i}_cargo", placeholder="Ej. Médico veterinario")
@@ -473,9 +490,8 @@ with tab_generar:
                     resumen.append(f"**Fecha · hora · dirección · lugar:** {' · '.join(v for v in (fecha, hora, direccion, lugar) if v) or '—'}")
                     resumen.append(f"**Expositores:** {', '.join(p['name'] for p in ponentes) or 'ninguno'}")
                 else:
-                    resumen.append(
-                        f"**Vigencia:** {fecha_inicio_promo.strftime('%d/%m/%Y')} al {fecha_fin_promo.strftime('%d/%m/%Y')}"
-                    )
+                    resumen.append(f"**Fecha:** {_fecha_vigencia(fecha_inicio_promo, fecha_fin_promo)}")
+                    resumen.append(f"**Dirección · lugar:** {' · '.join(v for v in (direccion, lugar) if v) or '—'}")
                 def _resumen_grupo(archivos, texto):
                     partes = ([f"{len(archivos)} logo(s)"] if archivos else []) + ([f"«{texto.strip()}»"] if texto.strip() else [])
                     return " + ".join(partes) or "—"
@@ -524,10 +540,7 @@ with tab_generar:
                         )
                         tema_evento, subtitulo_pieza = "", descripcion_promocion
                         fecha_texto = [
-                            v for v in (
-                                f"Vigente del {fecha_inicio_promo.strftime('%d/%m/%Y')}" if fecha_inicio_promo else "",
-                                f"al {fecha_fin_promo.strftime('%d/%m/%Y')}" if fecha_fin_promo else "",
-                            ) if v
+                            v for v in (_fecha_vigencia(fecha_inicio_promo, fecha_fin_promo), direccion.upper(), lugar) if v
                         ]
 
                     payload: Dict[str, Any] = {

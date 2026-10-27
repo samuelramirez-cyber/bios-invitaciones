@@ -451,6 +451,7 @@ class InvitationCanvasBuilder:
         subtitulo_size: int = 46,
         max_width: int = 800,
         text_color: Tuple[int, int, int] = (255, 255, 255),
+        max_bottom: Optional[int] = None,
     ) -> Dict[str, int]:
         """
         Titulo centrado del evento: el TEMA / nombre de la charla (mayusculas, color
@@ -473,8 +474,21 @@ class InvitationCanvasBuilder:
             lineas += [(p, fuente, accent) for p in partes]
         n_tema = len(lineas)
         if subtitulo and subtitulo.strip():
-            f_sub = self._load_font(subtitulo_font, subtitulo_size)
-            lineas += [(p, f_sub, text_color) for p in self._wrap_lines(subtitulo.strip(), f_sub, max_width)]
+            # Si hay un limite inferior (`max_bottom`), el subtitulo baja de tamano hasta caber.
+            y_tras_tema = top_y
+            for _, f_t, _ in lineas:
+                cap_t = self.draw.textbbox((0, 0), "H", font=f_t)
+                y_tras_tema += int((cap_t[3] - cap_t[1]) * 1.55)
+            tam_sub = subtitulo_size
+            while True:
+                f_sub = self._load_font(subtitulo_font, tam_sub)
+                partes_sub = self._wrap_lines(subtitulo.strip(), f_sub, max_width)
+                cap_s = self.draw.textbbox((0, 0), "H", font=f_sub)
+                alto_sub = len(partes_sub) * int((cap_s[3] - cap_s[1]) * 1.55)
+                if max_bottom is None or y_tras_tema + alto_sub <= max_bottom or tam_sub <= 26:
+                    break
+                tam_sub -= 2
+            lineas += [(p, f_sub, text_color) for p in partes_sub]
 
         y = top_y
         ancho_max = 0

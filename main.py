@@ -130,22 +130,29 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
     # ancladas abajo, tapan el borde inferior. Todo queda "envuelto" por las lineas. ---
     marco = boxes["frame"]
     fx0, fx1 = marco["side_margin"], builder.width - marco["side_margin"]
-    titulo = builder.draw_event_title(
-        payload.get("tema_evento", ""), payload.get("subtitulo", ""),
-        tema_font=font_black, subtitulo_font=font_bold, accent=accent,
-        top_y=lockup_bottom + marco["gap_after_lockup"],
-        tema_size=marco["kicker_size"], subtitulo_size=marco["title_size"], max_width=fx1 - fx0 - 120,
-    )
-    gap_top = (titulo["gap_x0"], titulo["gap_x1"])
-
-    y = titulo["bottom"]
-    if decision["num_ponentes"] > 0 and "speaker_cards" in boxes:
+    hay_tarjetas = decision["num_ponentes"] > 0 and "speaker_cards" in boxes
+    if hay_tarjetas:
         cards_box = boxes["speaker_cards"]
         args = dict(
             accent_color=accent, columns=cards_box.get("columns", 2), margin=fx0 + marco["cards_inset"], gap=marco["cards_gap"],
             name_font_path=font_bold, role_font_path=font_regular, topic_font_path=font_bold,
         )
         medida = builder.render_speaker_cards(decision["ponentes"], start_y=0, measure_only=True, **args)
+        limite_titulo = marco["cards_bottom"] - medida["bottom"] - 50
+    else:
+        limite_titulo = marco["empty_bottom"] - 60
+
+    titulo = builder.draw_event_title(
+        payload.get("tema_evento", ""), payload.get("subtitulo", ""),
+        tema_font=font_black, subtitulo_font=font_bold, accent=accent,
+        top_y=lockup_bottom + marco["gap_after_lockup"],
+        tema_size=marco["kicker_size"], subtitulo_size=marco["title_size"], max_width=fx1 - fx0 - 120,
+        max_bottom=limite_titulo,
+    )
+    gap_top = (titulo["gap_x0"], titulo["gap_x1"])
+
+    y = titulo["bottom"]
+    if hay_tarjetas:
         cards_top = max(titulo["bottom"] + 50, marco["cards_bottom"] - medida["bottom"])
         fila_top = cards_top + medida["last_row_top"]
         fila_alto = medida["last_row_bottom"] - medida["last_row_top"]
