@@ -106,32 +106,30 @@ MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
          "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 
 
-_CONECTORES = {"de", "del", "la", "las", "los", "el", "y", "e", "en", "a", "al"}
-
-
-def _normalizar_caso(texto: str) -> str:
-    """Direcciones y lugares en tipo normal: si llegan TODO EN MAYUSCULAS o todo en minusculas
-    se pasan a 'Carrera 20 # 20-1' / 'San Pedro de los Milagros'; si ya vienen mezclados, se respetan."""
-    t = " ".join((texto or "").split())
-    if t and any(c.isalpha() for c in t) and (t == t.upper() or t == t.lower()):
-        palabras = t.lower().split()
-        t = " ".join(p if (i > 0 and p in _CONECTORES) else p[:1].upper() + p[1:] for i, p in enumerate(palabras))
-    return t
+DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
 
 def _bloque_lugar(lugar: str, direccion: str, ciudad: str) -> list:
-    """Lineas del bloque de fecha: sitio, direccion y ciudad/departamento, cada una aparte."""
-    municipio_y_depto = [_normalizar_caso(x) for x in (ciudad or "").split(",")]
-    return [v for v in (_normalizar_caso(lugar), _normalizar_caso(direccion), *municipio_y_depto) if v]
+    """Lineas del bloque de fecha: sitio, direccion y municipio/departamento, cada una aparte y en minuscula."""
+    municipio_y_depto = (ciudad or "").split(",")
+    return [v for v in (" ".join(x.split()).lower() for x in (lugar, direccion, *municipio_y_depto)) if v]
+
+
+def _fecha_larga(d) -> str:
+    """Dia de la semana, dia del mes y mes (sin ano): 'Sábado 28 de noviembre'."""
+    return f"{DIAS[d.weekday()].capitalize()} {d.day} de {MESES[d.month - 1]}"
 
 
 def _fecha_vigencia(ini, fin) -> str:
-    """Un solo dia -> '28 de noviembre de 2026'; rango -> 'Del 28 al 30 de noviembre de 2026'."""
+    """Un solo dia -> 'Sábado 28 de noviembre'; rango -> 'Del sábado 28 al lunes 30 de noviembre'."""
     if fin is None or fin == ini:
-        return f"{ini.day} de {MESES[ini.month - 1]} de {ini.year}"
+        return _fecha_larga(ini)
     if (ini.month, ini.year) == (fin.month, fin.year):
-        return f"Del {ini.day} al {fin.day} de {MESES[fin.month - 1]} de {fin.year}"
-    return f"Del {ini.day} de {MESES[ini.month - 1]} al {fin.day} de {MESES[fin.month - 1]} de {fin.year}"
+        return f"Del {DIAS[ini.weekday()]} {ini.day} al {DIAS[fin.weekday()]} {fin.day} de {MESES[fin.month - 1]}"
+    return (
+        f"Del {DIAS[ini.weekday()]} {ini.day} de {MESES[ini.month - 1]} "
+        f"al {DIAS[fin.weekday()]} {fin.day} de {MESES[fin.month - 1]}"
+    )
 
 
 CENTROS_OPERATIVOS = [
@@ -355,7 +353,10 @@ with tab_generar:
                     "Subtítulo (opcional)", key="subtitulo", placeholder="Ej. Formas de afrontar el fenómeno del Niño", max_chars=100,
                     help="Complementa o amplía el tema. Sale debajo, en blanco.",
                 )
-                fecha = st.text_input("Fecha", key="fecha", placeholder="Ej. 24 de Septiembre de 2026")
+                fecha_evento = st.date_input("Fecha del evento", value=None, key="fecha", format="DD/MM/YYYY")
+                fecha = _fecha_larga(fecha_evento) if fecha_evento else ""
+                if not fecha_evento:
+                    pendientes["datos"].append("selecciona la fecha del evento")
                 col_h1, col_h2 = st.columns(2)
                 hora_inicio = col_h1.selectbox(
                     "Hora de inicio", HORAS_12H, index=None, placeholder="Ej. 7:00 a.m.", key="hora_inicio",
@@ -370,7 +371,7 @@ with tab_generar:
                 direccion = st.text_input("Dirección", key="direccion", placeholder="Ej. Carrera 20 # 20-1 Barrio Boyacá")
                 ciudad = st.text_input("Municipio y departamento", key="ciudad", placeholder="Ej. Tame, Arauca")
                 for etiqueta_o, valor_o in (
-                    ("Nombre o tema de la charla", titulo_evento), ("Subtítulo", subtitulo), ("Fecha", fecha),
+                    ("Nombre o tema de la charla", titulo_evento), ("Subtítulo", subtitulo),
                 ):
                     _revisar_ortografia(etiqueta_o, valor_o, ort["datos"])
                 if not titulo_evento.strip():

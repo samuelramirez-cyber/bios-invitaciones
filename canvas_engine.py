@@ -353,7 +353,7 @@ class InvitationCanvasBuilder:
         gap_date: int = 22,
         max_width: int = 1000,
         date_max_width: int = 470,
-        strong_max_width: int = 330,
+        strong_max_width: int = 410,
         strong_items: int = 1,
         text_color: Tuple[int, int, int] = (255, 255, 255),
         muted_color: Tuple[int, int, int] = (214, 214, 214),
