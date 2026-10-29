@@ -109,11 +109,15 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
     sub_lineas = payload.get("sub_linea") or [None]
     if not isinstance(sub_lineas, list):
         sub_lineas = [sub_lineas]
+    # Evento de las dos marcas: se muestra el icono de linea de cada marca (Contegral y Finca).
+    marcas_icono = marca_payload if isinstance(marca_payload, list) else [marca_payload]
+    marcas_icono = [m for m in marcas_icono if m] or [decision["marca"]]
     iconos = []
     for sub_linea in sub_lineas:
-        icono = builder.asset_repo.get_category_icon(decision["marca"], decision["categoria"], sub_linea)
-        if icono and str(icono) not in iconos:
-            iconos.append(str(icono))
+        for marca_i in marcas_icono:
+            icono = builder.asset_repo.get_category_icon(marca_i, decision["categoria"], sub_linea)
+            if icono and str(icono) not in iconos:
+                iconos.append(str(icono))
     lockup_bottom = builder.draw_title_lockup(
         payload["palabra_categoria"], payload["palabra_titulo"], _normalizar_fecha(payload["fecha_texto"]),
         category_font=get_brand_font_name(marca_payload, "medium"),
