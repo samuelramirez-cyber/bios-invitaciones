@@ -28,6 +28,7 @@ from PIL import Image
 import main as pipeline
 from assets_manager import CATEGORY_KEYWORDS
 from batch_processor import generar_reporte_resumen, process_csv_file, process_json_folder
+from formato_texto import nombre_propio, parrafo
 from spellcheck import formatear_errores, revisar_texto
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -110,9 +111,9 @@ DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "doming
 
 
 def _bloque_lugar(lugar: str, direccion: str, ciudad: str) -> list:
-    """Lineas del bloque de fecha: sitio, direccion y municipio/departamento, cada una aparte y en minuscula."""
+    """Lineas del bloque de fecha: sitio, direccion y municipio/departamento, cada una aparte y con mayuscula inicial."""
     municipio_y_depto = (ciudad or "").split(",")
-    return [v for v in (" ".join(x.split()).lower() for x in (lugar, direccion, *municipio_y_depto)) if v]
+    return [v for v in (nombre_propio(x) for x in (lugar, direccion, *municipio_y_depto)) if v]
 
 
 def _selector_horas(pendientes_datos: list) -> str:
@@ -563,13 +564,13 @@ with tab_generar:
 
                     if es_charla:
                         palabra_categoria, palabra_titulo = HEADLINE_POR_TIPO_EVENTO[tipo_evento]
-                        tema_evento, subtitulo_pieza = titulo_evento, subtitulo.strip()
+                        tema_evento, subtitulo_pieza = titulo_evento.strip(), parrafo(subtitulo)
                         fecha_texto = [v for v in (fecha, hora, *_bloque_lugar(lugar, direccion, ciudad), *_linea_telefono(telefono)) if v]
                     else:
                         palabra_categoria, palabra_titulo = HEADLINE_POR_ACTIVACION.get(
                             tipo_activacion, ("Actividad", "Promocional"),
                         )
-                        tema_evento, subtitulo_pieza = "", descripcion_promocion
+                        tema_evento, subtitulo_pieza = "", parrafo(descripcion_promocion)
                         fecha_texto = [v for v in (_fecha_vigencia(fecha_inicio_promo, fecha_fin_promo), hora, *_bloque_lugar(lugar, direccion, ciudad), *_linea_telefono(telefono)) if v]
 
                     payload: Dict[str, Any] = {
