@@ -538,7 +538,10 @@ class InvitationCanvasBuilder:
                 partes_sub = self._wrap_lines(subtitulo.strip(), f_sub, max_width)
                 cap_s = self.draw.textbbox((0, 0), "H", font=f_sub)
                 alto_sub = len(partes_sub) * int((cap_s[3] - cap_s[1]) * 1.55)
-                if max_bottom is None or y_tras_tema + alto_sub <= max_bottom or tam_sub <= 26:
+                cabe = max_bottom is None or y_tras_tema + alto_sub <= max_bottom
+                # Con un tema arriba, el subtitulo es secundario: maximo 2 lineas (3 si ya es pequeno).
+                sobrio = n_tema == 0 or len(partes_sub) <= 2 or (len(partes_sub) == 3 and tam_sub <= 38)
+                if (cabe and sobrio) or tam_sub <= 26:
                     break
                 tam_sub -= 2
             lineas += [(p, f_sub, text_color) for p in partes_sub]
@@ -626,7 +629,7 @@ class InvitationCanvasBuilder:
 
         texto_x = x + padding
         cursor_y = y + padding - 4
-        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, 25, texto_x, cursor_y, (255, 255, 255), "left", 4, measure_only=True)
+        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, 25, texto_x, cursor_y, (255, 255, 255), "left", 8, measure_only=True)
         if rol_lineas:
             cursor_y = self.draw_text_block(rol_lineas, role_font_path, 21, texto_x, cursor_y + 2, (215, 215, 215), "left", 3, measure_only=True)
         if empresa_lineas:
@@ -647,7 +650,7 @@ class InvitationCanvasBuilder:
         self._componer_capa(capa.resize((w, h), Image.LANCZOS), int(x), int(y))
 
         cursor_y = y + padding - 4
-        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, 25, texto_x, cursor_y, (255, 255, 255), "left", 4)
+        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, 25, texto_x, cursor_y, (255, 255, 255), "left", 8)
         if rol_lineas:
             cursor_y = self.draw_text_block(rol_lineas, role_font_path, 21, texto_x, cursor_y + 2, (215, 215, 215), "left", 3)
         if empresa_lineas:
@@ -739,18 +742,44 @@ class InvitationCanvasBuilder:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _recortar_margenes(img: Image.Image, tolerancia: int = 14) -> Image.Image:
-        """Quita el borde vacio de un logo (transparente, o blanco en JPG) para que el espaciado de la pata sea parejo."""
+    def _recortar_margenes(img: Image.Image, max_lado: int = 480) -> Image.Image:
+        """
+        Deja un logo listo para la pata: quita su borde transparente y, si es una imagen
+        (JPG/PNG opaco) sobre un fondo liso de cualquier color (blanco, crema...), vuelve
+        transparente ese fondo - solo el conectado con los bordes, asi lo blanco que esta
+        DENTRO del logo se conserva - y recorta el sobrante para que el espaciado sea parejo.
+        """
         rgba = img.convert("RGBA")
+        rgba.thumbnail((max_lado, max_lado), Image.LANCZOS)
         caja = rgba.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
         if caja:
             rgba = rgba.crop(caja)
+
         if rgba.getchannel("A").getextrema()[0] > 250:
-            fondo = Image.new("RGB", rgba.size, (255, 255, 255))
-            dif = ImageChops.difference(rgba.convert("RGB"), fondo).convert("L").point(lambda v: 255 if v > tolerancia else 0)
-            caja = dif.getbbox()
-            if caja:
-                rgba = rgba.crop(caja)
+            rgb = rgba.convert("RGB")
+            w, h = rgb.size
+            esquinas = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+            # El color de fondo es la mediana del borde de la imagen (las esquinas sueltas de un
+            # JPG traen ruido de compresion); solo se quita si ese borde es parejo.
+            borde = (
+                [rgb.getpixel((x, 0)) for x in range(w)] + [rgb.getpixel((x, h - 1)) for x in range(w)]
+                + [rgb.getpixel((0, y)) for y in range(h)] + [rgb.getpixel((w - 1, y)) for y in range(h)]
+            )
+            fondo = tuple(sorted(c[i] for c in borde)[len(borde) // 2] for i in range(3))
+            parejos = sum(1 for c in borde if max(abs(c[i] - fondo[i]) for i in range(3)) <= 45)
+            if parejos >= 0.85 * len(borde):
+                marcado = rgb.copy()
+                for esquina in esquinas:
+                    marcado.putpixel(esquina, fondo)
+                    ImageDraw.floodfill(marcado, esquina, (255, 0, 255), thresh=90)
+                conectado = ImageChops.difference(marcado, rgb).convert("L").point(lambda v: 255 if v else 0)
+                r, g, b_ = ImageChops.difference(rgb, Image.new("RGB", rgb.size, fondo)).split()
+                lejania = ImageChops.lighter(ImageChops.lighter(r, g), b_)
+                rampa = lejania.point(lambda v: 0 if v <= 24 else min(255, int((v - 24) * 255 / 40)))
+                rgba.putalpha(Image.composite(rampa, Image.new("L", rgb.size, 255), conectado))
+                caja = rgba.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
+                if caja:
+                    rgba = rgba.crop(caja)
         return rgba
 
     def render_sponsor_pata(
