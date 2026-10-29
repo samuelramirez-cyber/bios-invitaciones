@@ -173,7 +173,7 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
     # marca+categoria (co-marca, categoria sin logo) se dibuja la insignia de
     # texto; el payload puede sobreescribir su etiqueta. ---
     maestria_box = boxes["maestria_badge"]
-    badge_y = max(y + 30, maestria_box["y"])
+    badge_y = max(y + 50, maestria_box["y"])
     logo_maestria = builder.asset_repo.get_maestria_logo(decision["marca"], decision["categoria"])
     resultado_logo = None
     if logo_maestria:
@@ -204,7 +204,7 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
     if any(g["logos"] or str(g["texto"]).strip() for g in grupos_pata):
         es_gris = tuple(accent) == CATEGORY_COLORS["general"]
         builder.render_sponsor_pata(
-            grupos_pata, y_position=max(y + 30, sponsor_box["y"]),
+            grupos_pata, y_position=max(y + 70, sponsor_box["y"]),
             frame_color=(255, 255, 255) if es_gris else accent,
             label_color=CATEGORY_COLORS["porcicola"] if es_gris else accent,
             label_font_path=font_bold,
