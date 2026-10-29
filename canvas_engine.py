@@ -741,6 +741,23 @@ class InvitationCanvasBuilder:
     # Fila de logos de marcas aliadas (patrocinadores multiples)
     # ------------------------------------------------------------------
 
+    def draw_label_over(
+        self, texto: str, x0: float, x1: float, y_top: int, font_path: str,
+        color: Tuple[int, int, int], size: int = 36, margen: int = 22,
+    ) -> None:
+        """Rotulo ("Invitan") centrado entre x0 y x1, con una linea fina del mismo color a cada lado."""
+        fuente = self._load_font(font_path, size)
+        caja = self.draw.textbbox((0, 0), texto, font=fuente)
+        ancho = caja[2] - caja[0]
+        cx = (x0 + x1) / 2
+        y_texto = y_top
+        self.draw.text((cx - ancho / 2 - caja[0], y_texto - caja[1]), texto, font=fuente, fill=tuple(color))
+        y_linea = y_texto + (caja[3] - caja[1]) / 2 + 1
+        largo = (x1 - x0 - ancho) / 2 - margen
+        if largo > 8:
+            self.draw.line([(x0, y_linea), (x0 + largo, y_linea)], fill=tuple(color), width=2)
+            self.draw.line([(x1 - largo, y_linea), (x1, y_linea)], fill=tuple(color), width=2)
+
     @staticmethod
     def _recortar_margenes(img: Image.Image, max_lado: int = 480) -> Image.Image:
         """

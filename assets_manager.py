@@ -334,6 +334,22 @@ class AssetRepository:
         candidata = MAESTRIA_LOGOS_DIR / f"{marca_unica.strip().capitalize()}_Maestria_{sufijo}.png"
         return candidata if candidata.is_file() else None
 
+    @staticmethod
+    def maestria_x_marcas(ruta: Path) -> Optional[int]:
+        """
+        Columna (en px del PNG) donde empiezan los logos de marca dentro de un logo "Maestria |
+        marca(s)": la primera columna ocupada tras el separador, que cae hacia x=400.
+        Sirve igual para el PNG de una marca y para el compuesto de co-marca.
+        """
+        try:
+            alfa = Image.open(ruta).convert("RGBA").getchannel("A")
+        except (FileNotFoundError, OSError):
+            return None
+        for x in range(410, alfa.width):
+            if alfa.crop((x, 0, x + 1, alfa.height)).getbbox():
+                return x
+        return None
+
     def _maestria_comarca(self, sufijo: str) -> Optional[Path]:
         """
         Logo "Maestria | Contegral  Finca": toma el emblema + separador del PNG

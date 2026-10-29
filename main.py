@@ -18,6 +18,8 @@ import time
 from pathlib import Path
 from typing import List, Optional, Union
 
+from PIL import Image
+
 from assets_manager import get_brand_font_name
 from canvas_engine import InvitationCanvasBuilder
 from layout_engine import CATEGORY_COLORS, LayoutConfigError, LayoutDecisionEngine
@@ -180,10 +182,24 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
     badge_y = max(y + 50, maestria_box["y"])
     logo_maestria = builder.asset_repo.get_maestria_logo(decision["marca"], decision["categoria"])
     resultado_logo = None
+    # `etiqueta_sobre_marcas` ("Invitan"): el rotulo va sobre los logos grandes de marca de la
+    # insignia y reemplaza a la pata aparte (evita repetir Contegral/Finca en la misma pieza).
+    etiqueta_marcas = str(payload.get("etiqueta_sobre_marcas") or "").strip() if logo_maestria else ""
+    alto_rotulo = 54 if etiqueta_marcas else 0
     if logo_maestria:
         resultado_logo = builder.paste_image(
-            logo_maestria, x=builder.width / 2, y=badge_y, max_size=(780, 170), center_x=True,
+            logo_maestria, x=builder.width / 2, y=badge_y + alto_rotulo, max_size=(780, 170), center_x=True,
         )
+    if resultado_logo and etiqueta_marcas:
+        x_marcas = builder.asset_repo.maestria_x_marcas(logo_maestria)
+        ancho_original = Image.open(logo_maestria).width
+        if x_marcas:
+            escala = resultado_logo[2] / ancho_original
+            region_x0 = resultado_logo[0] + x_marcas * escala
+            region_x1 = resultado_logo[0] + resultado_logo[2]
+            builder.draw_label_over(
+                etiqueta_marcas, region_x0, region_x1, y_top=badge_y, font_path=font_bold, color=accent,
+            )
     if resultado_logo:
         y = resultado_logo[1] + resultado_logo[3]
     else:
