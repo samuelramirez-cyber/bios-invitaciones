@@ -606,6 +606,7 @@ class InvitationCanvasBuilder:
         r_big: int = 48,
         min_height: int = 0,
         measure_only: bool = False,
+        escala: float = 1.0,
     ) -> int:
         """
         Tarjeta como en las piezas reales: fondo oscuro translucido, borde de
@@ -614,9 +615,12 @@ class InvitationCanvasBuilder:
         (negrita), cargo/empresa (regular), linea de acento y TEMA en
         mayusculas (negrita, color de acento). Devuelve el Y inferior.
         """
-        name_font = self._load_font(name_font_path, 25)
-        role_font = self._load_font(role_font_path, 21)
-        topic_font = self._load_font(topic_font_path, 21)
+        sz_nombre, sz_rol = int(25 * escala), int(21 * escala)
+        padding = int(padding * escala)
+        r_small, r_big = int(r_small * escala), int(r_big * escala)
+        name_font = self._load_font(name_font_path, sz_nombre)
+        role_font = self._load_font(role_font_path, sz_rol)
+        topic_font = self._load_font(topic_font_path, sz_rol)
         content_width = width - 2 * padding
 
         nombre_lineas = self._wrap_lines(ponente.get("name", "").upper(), name_font, content_width)
@@ -629,13 +633,13 @@ class InvitationCanvasBuilder:
 
         texto_x = x + padding
         cursor_y = y + padding - 4
-        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, 25, texto_x, cursor_y, (255, 255, 255), "left", 8, measure_only=True)
+        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, sz_nombre, texto_x, cursor_y, (255, 255, 255), "left", 8, measure_only=True)
         if rol_lineas:
-            cursor_y = self.draw_text_block(rol_lineas, role_font_path, 21, texto_x, cursor_y + 2, (215, 215, 215), "left", 3, measure_only=True)
+            cursor_y = self.draw_text_block(rol_lineas, role_font_path, sz_rol, texto_x, cursor_y + 2, (215, 215, 215), "left", 3, measure_only=True)
         if empresa_lineas:
-            cursor_y = self.draw_text_block(empresa_lineas, role_font_path, 21, texto_x, cursor_y + 4, (255, 255, 255), "left", 3, measure_only=True)
+            cursor_y = self.draw_text_block(empresa_lineas, role_font_path, sz_rol, texto_x, cursor_y + 4, (255, 255, 255), "left", 3, measure_only=True)
         if tema_lineas:
-            cursor_y = self.draw_text_block(tema_lineas, topic_font_path, 21, texto_x, cursor_y + 8 + 12, accent_color, "left", 7, measure_only=True)
+            cursor_y = self.draw_text_block(tema_lineas, topic_font_path, sz_rol, texto_x, cursor_y + 8 + 12, accent_color, "left", 7, measure_only=True)
         card_bottom = max(cursor_y + padding + 6, y + min_height)
         if measure_only:
             return int(card_bottom)
@@ -650,15 +654,15 @@ class InvitationCanvasBuilder:
         self._componer_capa(capa.resize((w, h), Image.LANCZOS), int(x), int(y))
 
         cursor_y = y + padding - 4
-        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, 25, texto_x, cursor_y, (255, 255, 255), "left", 8)
+        cursor_y = self.draw_text_block(nombre_lineas, name_font_path, sz_nombre, texto_x, cursor_y, (255, 255, 255), "left", 8)
         if rol_lineas:
-            cursor_y = self.draw_text_block(rol_lineas, role_font_path, 21, texto_x, cursor_y + 2, (215, 215, 215), "left", 3)
+            cursor_y = self.draw_text_block(rol_lineas, role_font_path, sz_rol, texto_x, cursor_y + 2, (215, 215, 215), "left", 3)
         if empresa_lineas:
-            cursor_y = self.draw_text_block(empresa_lineas, role_font_path, 21, texto_x, cursor_y + 4, (255, 255, 255), "left", 3)
+            cursor_y = self.draw_text_block(empresa_lineas, role_font_path, sz_rol, texto_x, cursor_y + 4, (255, 255, 255), "left", 3)
         if tema_lineas:
             linea_y = cursor_y + 8
-            self.draw.line([(x + 1, linea_y), (x + width - 64, linea_y)], fill=tuple(accent_color), width=2)
-            self.draw_text_block(tema_lineas, topic_font_path, 21, texto_x, linea_y + 12, accent_color, "left", 7)
+            self.draw.line([(x + 1, linea_y), (x + width - int(64 * escala), linea_y)], fill=tuple(accent_color), width=2)
+            self.draw_text_block(tema_lineas, topic_font_path, sz_rol, texto_x, linea_y + 12, accent_color, "left", 7)
         return int(card_bottom)
 
     def render_speaker_cards(
@@ -686,11 +690,13 @@ class InvitationCanvasBuilder:
                     "last_row_x0": margin, "last_row_x1": self.width - margin}
 
         cols = 1 if len(speakers) == 1 else columns
+        escala = 1.0
         card_width = (self.width - 2 * margin - gap * (cols - 1)) / cols
         if cols == 1:
-            card_width = min(card_width, 440)
+            card_width = min(card_width, 640)
             margin = (self.width - card_width) / 2
-        fuentes = dict(name_font_path=name_font_path, role_font_path=role_font_path, topic_font_path=topic_font_path)
+            escala = 1.4
+        fuentes = dict(name_font_path=name_font_path, role_font_path=role_font_path, topic_font_path=topic_font_path, escala=escala)
 
         y = start_y
         info = {}
