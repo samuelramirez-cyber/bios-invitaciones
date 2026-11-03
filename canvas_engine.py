@@ -516,7 +516,7 @@ class InvitationCanvasBuilder:
         text_color: Tuple[int, int, int] = (255, 255, 255),
         max_bottom: Optional[int] = None,
         caja_color: Optional[Tuple[int, int, int]] = None,
-        caja_opacidad: float = 0.62,
+        caja_opacidad: float = 0.45,
     ) -> Dict[str, int]:
         """
         Titulo centrado del evento: el TEMA / nombre de la charla (mayusculas, color
