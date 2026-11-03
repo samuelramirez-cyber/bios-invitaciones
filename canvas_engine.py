@@ -516,6 +516,7 @@ class InvitationCanvasBuilder:
         text_color: Tuple[int, int, int] = (255, 255, 255),
         max_bottom: Optional[int] = None,
         caja_color: Optional[Tuple[int, int, int]] = None,
+        caja_opacidad: float = 0.62,
     ) -> Dict[str, int]:
         """
         Titulo centrado del evento: el TEMA / nombre de la charla (mayusculas, color
@@ -590,7 +591,7 @@ class InvitationCanvasBuilder:
                 S3 = 3
                 capa = Image.new("RGBA", ((x1 - x0) * S3, (y1 - y0) * S3), (0, 0, 0, 0))
                 ImageDraw.Draw(capa).rounded_rectangle(
-                    [0, 0, (x1 - x0) * S3 - 1, (y1 - y0) * S3 - 1], radius=14 * S3, fill=caja + (238,),
+                    [0, 0, (x1 - x0) * S3 - 1, (y1 - y0) * S3 - 1], radius=14 * S3, fill=caja + (int(255 * caja_opacidad),),
                 )
                 self._componer_capa(capa.resize((x1 - x0, y1 - y0), Image.LANCZOS), x0, y0)
                 caja_box = (x0, y0, x1, y1)
