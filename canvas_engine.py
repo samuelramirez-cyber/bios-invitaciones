@@ -796,6 +796,9 @@ class InvitationCanvasBuilder:
                     marcado.putpixel(esquina, fondo)
                     ImageDraw.floodfill(marcado, esquina, (255, 0, 255), thresh=90)
                 conectado = ImageChops.difference(marcado, rgb).convert("L").point(lambda v: 255 if v else 0)
+                if sum(fondo) / 3 < 45:
+                    # Logo disenado sobre negro: todo lo negro (tambien los huecos internos) pasa a transparente.
+                    conectado = Image.new("L", rgb.size, 255)
                 r, g, b_ = ImageChops.difference(rgb, Image.new("RGB", rgb.size, fondo)).split()
                 lejania = ImageChops.lighter(ImageChops.lighter(r, g), b_)
                 rampa = lejania.point(lambda v: 0 if v <= 24 else min(255, int((v - 24) * 255 / 40)))
@@ -814,7 +817,7 @@ class InvitationCanvasBuilder:
         header_logo: Optional[str] = None,
         label_font_path: str = str(DEFAULT_FONT_BOLD),
         label_size: int = 38,
-        max_logo_height: int = 62,
+        max_logo_height: int = 74,
         text_size: int = 25,
         box_fill: Tuple[int, int, int] = (240, 240, 240),
         box_opacity: float = 0.9,

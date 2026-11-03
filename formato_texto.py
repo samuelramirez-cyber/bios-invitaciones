@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import List
 
-CONECTORES = frozenset("a al con de del e el en la las lo los o para por sin su sus y".split())
+CONECTORES = frozenset("a al con de del e el en la las lo los o para por sin su sus via vía y".split())
 _MARCAS = ("Contegral", "Finca", "Bios", "Grupo Bios", "Fedegán", "Agasurbol")
 _TERMINADOR = re.compile(r"([.!?]\s+|[.!?]$)")
 
