@@ -492,6 +492,16 @@ class InvitationCanvasBuilder:
             dibujo.rectangle([(gap_bottom[0] - x0) * S, h * S - alto_corte, (gap_bottom[1] - x0) * S, h * S], fill=(0, 0, 0, 0))
         self._componer_capa(capa.resize((w, h), Image.LANCZOS), int(x0), int(y_top))
 
+    @staticmethod
+    def _color_caja(accent: Tuple[int, int, int]) -> Tuple[int, int, int]:
+        """Color del recuadro de texto: el de la linea, un poco mas profundo, y lo bastante oscuro para leer texto blanco."""
+        c = [int(v * 0.92) for v in accent]
+        lum = (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255
+        if lum > 0.42:
+            k = 0.42 / lum
+            c = [int(v * k) for v in c]
+        return (c[0], c[1], c[2])
+
     def draw_event_title(
         self,
         tema: str,
@@ -505,15 +515,22 @@ class InvitationCanvasBuilder:
         max_width: int = 800,
         text_color: Tuple[int, int, int] = (255, 255, 255),
         max_bottom: Optional[int] = None,
+        caja_color: Optional[Tuple[int, int, int]] = None,
     ) -> Dict[str, int]:
         """
         Titulo centrado del evento: el TEMA / nombre de la charla (mayusculas, color
         de acento, hasta 2 lineas) y debajo el SUBTITULO que lo complementa (blanco,
-        se ajusta a `max_width`). Ambos son opcionales. Devuelve {"bottom", "frame_y"
-        (Y por donde pasa el borde superior del marco), "gap_x0", "gap_x1" (rango X
-        que el marco deja abierto)}.
+        se ajusta a `max_width`). Ambos son opcionales. Con `caja_color` el subtitulo
+        va sobre un recuadro redondeado de ese color (como en las piezas de
+        referencia del Dia del Pollito) y el marco se abre a su altura. Devuelve
+        {"bottom", "frame_y" (Y por donde pasa el borde superior del marco), "gap_x0",
+        "gap_x1" (rango X que el marco deja abierto)}.
         """
         cx = self.width / 2
+        caja = self._color_caja(caja_color) if caja_color else None
+        ancho_sub_max = min(max_width, 640) if caja else max_width
+        pad_x, pad_v, gap_caja = 40, 26, 22
+
         lineas: List[Tuple[str, ImageFont.ImageFont, Tuple[int, int, int]]] = []
         if tema and tema.strip():
             tam = tema_size
@@ -532,15 +549,20 @@ class InvitationCanvasBuilder:
             for _, f_t, _ in lineas:
                 cap_t = self.draw.textbbox((0, 0), "H", font=f_t)
                 y_tras_tema += int((cap_t[3] - cap_t[1]) * 1.55)
+            extra_caja = (gap_caja if n_tema else 0) + 2 * pad_v if caja else 0
             tam_sub = subtitulo_size
             while True:
                 f_sub = self._load_font(subtitulo_font, tam_sub)
-                partes_sub = self._wrap_lines(subtitulo.strip(), f_sub, max_width)
+                partes_sub = self._wrap_lines(subtitulo.strip(), f_sub, ancho_sub_max)
                 cap_s = self.draw.textbbox((0, 0), "H", font=f_sub)
-                alto_sub = len(partes_sub) * int((cap_s[3] - cap_s[1]) * 1.55)
+                alto_sub = len(partes_sub) * int((cap_s[3] - cap_s[1]) * 1.55) + extra_caja
                 cabe = max_bottom is None or y_tras_tema + alto_sub <= max_bottom
-                # Con un tema arriba, el subtitulo es secundario: maximo 2 lineas (3 si ya es pequeno).
-                sobrio = n_tema == 0 or len(partes_sub) <= 2 or (len(partes_sub) == 3 and tam_sub <= 38)
+                # Con un tema arriba, el subtitulo es secundario: maximo 2 lineas (3 si ya es pequeno);
+                # sobre recuadro se admite una linea mas porque el ancho es menor.
+                if caja:
+                    sobrio = len(partes_sub) <= (3 if n_tema else 4)
+                else:
+                    sobrio = n_tema == 0 or len(partes_sub) <= 2 or (len(partes_sub) == 3 and tam_sub <= 38)
                 if (cabe and sobrio) or tam_sub <= 26:
                     break
                 tam_sub -= 2
@@ -550,16 +572,41 @@ class InvitationCanvasBuilder:
         ancho_max = 0
         frame_y = top_y
         ultimo_cap = 0
+        caja_box = None
         for i, (texto, fuente, color) in enumerate(lineas):
             cap = self.draw.textbbox((0, 0), "H", font=fuente)
             cap_h = cap[3] - cap[1]
             b = self.draw.textbbox((0, 0), texto, font=fuente)
-            ancho_max = max(ancho_max, b[2] - b[0])
-            self.draw.text((cx - (b[2] - b[0]) / 2 - b[0], y - cap[1]), texto, font=fuente, fill=color)
-            if i == (n_tema if n_tema < len(lineas) else n_tema - 1):
+            if caja and i == n_tema:
+                # primera linea del subtitulo: se dibuja el recuadro antes que el texto
+                y += gap_caja if n_tema else 0
+                resto = lineas[n_tema:]
+                anchos = [self.draw.textbbox((0, 0), t, font=f)[2] - self.draw.textbbox((0, 0), t, font=f)[0] for t, f, _ in resto]
+                paso = int(cap_h * 1.55)
+                x0 = int(cx - max(anchos) / 2 - pad_x)
+                x1 = int(cx + max(anchos) / 2 + pad_x)
+                y0 = int(y - pad_v)
+                y1 = int(y + (len(resto) - 1) * paso + cap_h + pad_v)
+                S3 = 3
+                capa = Image.new("RGBA", ((x1 - x0) * S3, (y1 - y0) * S3), (0, 0, 0, 0))
+                ImageDraw.Draw(capa).rounded_rectangle(
+                    [0, 0, (x1 - x0) * S3 - 1, (y1 - y0) * S3 - 1], radius=14 * S3, fill=caja + (238,),
+                )
+                self._componer_capa(capa.resize((x1 - x0, y1 - y0), Image.LANCZOS), x0, y0)
+                caja_box = (x0, y0, x1, y1)
+                frame_y = (y0 + y1) // 2
+            elif not caja and i == (n_tema if n_tema < len(lineas) else n_tema - 1):
                 frame_y = y + int(cap_h * 0.4)
+            if not (caja and i >= n_tema):
+                ancho_max = max(ancho_max, b[2] - b[0])
+            self.draw.text((cx - (b[2] - b[0]) / 2 - b[0], y - cap[1]), texto, font=fuente, fill=color)
             y += int(cap_h * 1.55)
             ultimo_cap = cap_h
+        if caja_box:
+            return {
+                "bottom": int(caja_box[3] + 8), "frame_y": int(frame_y),
+                "gap_x0": int(caja_box[0] - 10), "gap_x1": int(caja_box[2] + 10),
+            }
         return {
             "bottom": int(y - int(ultimo_cap * 0.55)), "frame_y": int(frame_y),
             "gap_x0": int(cx - ancho_max / 2 - 26), "gap_x1": int(cx + ancho_max / 2 + 26),
