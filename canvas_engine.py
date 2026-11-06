@@ -532,6 +532,20 @@ class InvitationCanvasBuilder:
             i += n
         return lineas
 
+    def _lineas_separadas(self, texto: str, f_ancha: ImageFont.ImageFont, max_width: int) -> List[List[Tuple[str, bool]]]:
+        """Como _lineas_ricas, pero el texto en negrita y el normal nunca comparten linea: cada uno va en las suyas."""
+        corridas: List[List] = []
+        for w, b in self._palabras_marcadas(texto):
+            if corridas and corridas[-1][0] == b:
+                corridas[-1][1].append(w)
+            else:
+                corridas.append([b, [w]])
+        lineas = []
+        for b, ws in corridas:
+            for l in self._wrap_lines(" ".join(ws), f_ancha, max_width):
+                lineas.append([(w, b) for w in l.split()])
+        return lineas
+
     def _ancho_rico(self, linea, f_reg, f_neg) -> float:
         esp = self.draw.textlength(" ", font=f_reg)
         return sum(self.draw.textlength(w, font=(f_neg if b else f_reg)) for w, b in linea) + esp * (len(linea) - 1)
@@ -561,10 +575,10 @@ class InvitationCanvasBuilder:
         frame_y, gap_x0, gap_x1 = None, cx - 10, cx + 10
 
         if intro and intro.strip():
-            lineas_i = self._lineas_ricas(intro, f_i_neg, max_width)
+            lineas_i = self._lineas_separadas(intro, f_i_neg, max_width)
             cap = self.draw.textbbox((0, 0), "H", font=f_i_reg)
             cap_h, paso = cap[3] - cap[1], int((cap[3] - cap[1]) * 1.55)
-            idx_marco = min(1, len(lineas_i) - 1)
+            idx_marco = next((k for k, l in enumerate(lineas_i) if not l[0][1]), len(lineas_i) - 1)
             for k, linea in enumerate(lineas_i):
                 self._dibujar_rica(linea, cx, y + cap_h, f_i_reg, f_i_neg, text_color, accent)
                 if k == idx_marco:

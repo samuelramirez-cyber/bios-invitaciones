@@ -392,7 +392,7 @@ with tab_generar:
                 intro_promocion = st.text_area(
                     "Frase de invitación (opcional)", key="intro_promocion", max_chars=180,
                     placeholder="Ej. **Acompáñanos el sábado 28 de noviembre,** tendremos asesoría nutricional especializada.",
-                    help="Va arriba del recuadro. Lo que pongas entre **dobles asteriscos** sale en negrita y en el color de la línea.",
+                    help="Va arriba del recuadro. Lo que pongas entre **dobles asteriscos** sale en negrita y en el color de la línea, en sus propias líneas; el resto sale en blanco debajo.",
                 )
                 _revisar_ortografia("Frase de invitación", intro_promocion, ort["datos"])
                 descripcion_promocion = st.text_area(
