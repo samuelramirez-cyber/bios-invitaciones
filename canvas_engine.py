@@ -636,13 +636,19 @@ class InvitationCanvasBuilder:
             cap_hn = cap_n[3] - cap_n[1]
             yn = bottom + 24
             if lineas_n:
-                # velo oscuro suave: la nota debe leerse sobre cualquier foto
-                bw = int(max(self._ancho_rico(l, fn_reg, fn_neg) for l in lineas_n) + 44)
-                y0n = int(yn - 14)
-                y1n = int(yn + (len(lineas_n) - 1) * int(cap_hn * 1.5) + cap_hn + 14)
-                capa = Image.new("RGBA", (bw * 3, (y1n - y0n) * 3), (0, 0, 0, 0))
-                ImageDraw.Draw(capa).rounded_rectangle([0, 0, bw * 3 - 1, (y1n - y0n) * 3 - 1], radius=14 * 3, fill=(0, 0, 0, 120))
-                self._componer_capa(capa.resize((bw, y1n - y0n), Image.LANCZOS), int(cx - bw / 2), y0n)
+                # Sin recuadro: sombra suave detras del texto para que se lea sobre cualquier foto.
+                paso_n = int(cap_hn * 1.5)
+                bw = int(max(self._ancho_rico(l, fn_reg, fn_neg) for l in lineas_n) + 60)
+                y0n = int(yn - 24)
+                hh = int((len(lineas_n) - 1) * paso_n + cap_hn + 48)
+                sombra = Image.new("RGBA", (bw, hh), (0, 0, 0, 0))
+                dibujo_real, self.draw = self.draw, ImageDraw.Draw(sombra)
+                for k, linea in enumerate(lineas_n):
+                    self._dibujar_rica(linea, bw / 2, 24 + cap_hn + k * paso_n, fn_reg, fn_neg, (0, 0, 0, 255), (0, 0, 0, 255))
+                self.draw = dibujo_real
+                sombra = sombra.filter(ImageFilter.GaussianBlur(5))
+                sombra.putalpha(sombra.getchannel("A").point(lambda v: min(255, int(v * 2.6))))
+                self._componer_capa(sombra, int(cx - bw / 2), y0n)
             for linea in lineas_n:
                 self._dibujar_rica(linea, cx, yn + cap_hn, fn_reg, fn_neg, text_color, text_color)
                 yn += int(cap_hn * 1.5)
