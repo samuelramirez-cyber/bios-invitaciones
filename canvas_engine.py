@@ -353,7 +353,7 @@ class InvitationCanvasBuilder:
         gap_date: int = 22,
         max_width: int = 1000,
         date_max_width: int = 470,
-        strong_max_width: int = 410,
+        strong_max_width: int = 470,
         strong_items: int = 1,
         text_color: Tuple[int, int, int] = (255, 255, 255),
         muted_color: Tuple[int, int, int] = (214, 214, 214),
@@ -920,13 +920,15 @@ class InvitationCanvasBuilder:
             for etiqueta, logos, texto in grupos:
                 fila = []
                 for im in logos:
-                    k = min(alto_logo / im.height, (alto_logo * 2.4) / im.width)
+                    # Logos redondos o cuadrados (sellos) llevan texto pequeno: se dejan algo mas grandes.
+                    alto_i = alto_logo * 1.4 if im.width / im.height < 1.3 else alto_logo
+                    k = min(alto_i / im.height, (alto_i * 2.4) / im.width)
                     fila.append(im.resize((max(1, int(im.width * k)), max(1, int(im.height * k))), Image.LANCZOS))
                 escalados.append(fila)
                 bl = self.draw.textbbox((0, 0), etiqueta, font=font_label)
                 bases.append((bl[2] - bl[0]) + sep_gap * 2 + 2 + sum(i.width for i in fila) + gap_logo * max(len(fila) - 1, 0) + (gap_logo if fila and texto else 0))
                 if fila:
-                    altos.append(alto_logo)
+                    altos.append(max(i.height for i in fila))
             # El texto usa todo el ancho que sobre en la caja: solo baja de linea si ya no cabe de lado.
             n_con_texto = sum(1 for _, _, tx in grupos if tx)
             disponible = max_width - 2 * pad_x - gap_grupo * (len(grupos) - 1) - sum(bases)

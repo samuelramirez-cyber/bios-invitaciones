@@ -44,6 +44,9 @@ desparasitación
 mastitis
 
 conversatorio
+preiniciación
+preiniciador
+iniciación
 conversatorios
 
 # Municipios y centros operativos

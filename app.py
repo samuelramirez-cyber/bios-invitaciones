@@ -116,8 +116,10 @@ def _bloque_lugar(lugar: str, direccion: str, ciudad: str) -> list:
     return [v for v in (nombre_propio(x) for x in (lugar, direccion, *municipio_y_depto)) if v]
 
 
-def _selector_horas(pendientes_datos: list) -> str:
+def _selector_horas(pendientes_datos: list, permitir_todo_el_dia: bool = False) -> str:
     """Hora de inicio y fin (opcional) en formato 12 h; devuelve '7:00 a.m.' o '7:00 a.m. a 9:00 a.m.'."""
+    if permitir_todo_el_dia and st.checkbox("Todo el día", key="hora_todo_el_dia"):
+        return "Todo el día"
     col_h1, col_h2 = st.columns(2)
     hora_inicio = col_h1.selectbox("Hora de inicio", HORAS_12H, index=None, placeholder="Ej. 7:00 a.m.", key="hora_inicio")
     hora_fin = col_h2.selectbox("Hora de finalización (opcional)", HORAS_12H, index=None, placeholder="Ej. 9:00 a.m.", key="hora_fin")
@@ -154,7 +156,7 @@ CENTROS_OPERATIVOS = [
 ]
 
 TIPOS_ACTIVACION = [
-    "Día del pollito", "Día del ganadero", "Día del acuicultor",
+    "Día del pollito", "Semana del pollito", "Día del ganadero", "Día del acuicultor",
     "Día del caballo (Cinta Azul)", "Día del caballo (Rodeo)",
     "Día de lechón", "Día del cerdo", "Día Contegral", "Día Finca",
 ]
@@ -168,6 +170,7 @@ HEADLINE_POR_TIPO_EVENTO = {
 }
 HEADLINE_POR_ACTIVACION = {
     "Día del pollito": ("Día del", "Pollito"),
+    "Semana del pollito": ("Semana del", "Pollito"),
     "Día del ganadero": ("Día del", "Ganadero"),
     "Día del acuicultor": ("Día del", "Acuicultor"),
     "Día del caballo (Cinta Azul)": ("Día del Caballo", "Cinta Azul"),
@@ -403,7 +406,7 @@ with tab_generar:
                 fecha_fin_promo = col_ff.date_input("Fecha final de la promoción", key="fecha_fin_promo")
                 if fecha_fin_promo < fecha_inicio_promo:
                     pendientes["datos"].append("la fecha final no puede ser anterior a la inicial")
-                hora = _selector_horas(pendientes["datos"])
+                hora = _selector_horas(pendientes["datos"], permitir_todo_el_dia=True)
                 lugar = st.text_input("Lugar (opcional, nombre del sitio)", key="lugar", placeholder="Ej. Agropecuaria La Gran Vía")
                 direccion = st.text_input("Dirección (opcional)", key="direccion", placeholder="Ej. Carrera 4 N 2-37")
                 ciudad = st.text_input("Municipio y departamento (opcional)", key="ciudad", placeholder="Ej. Labateca, Norte de Santander")
