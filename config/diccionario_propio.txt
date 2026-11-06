@@ -55,6 +55,13 @@ iniciación
 conversatorios
 
 # Municipios y centros operativos
+sucre
+sincelejo
+perico
+hemeroteca
+agroenlace
+pronavícola
+unisucre
 envigado
 itagüí
 bogotá
