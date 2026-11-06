@@ -43,6 +43,9 @@ agronegocio
 desparasitación
 mastitis
 
+conversatorio
+conversatorios
+
 # Municipios y centros operativos
 envigado
 itagüí
@@ -51,5 +54,8 @@ mosquera
 cartago
 buga
 neiva
+tierralta
+córdoba
+urrá
 bucaramanga
 ciénaga

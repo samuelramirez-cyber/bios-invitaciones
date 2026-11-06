@@ -22,7 +22,7 @@ from PIL import Image
 
 from assets_manager import get_brand_font_name
 from canvas_engine import InvitationCanvasBuilder
-from layout_engine import CATEGORY_COLORS, LayoutConfigError, LayoutDecisionEngine
+from layout_engine import CATEGORY_COLORS, LayoutConfigError, LayoutDecisionEngine, normalizar_categoria
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_PAYLOAD_PATH = BASE_DIR / "payload.json"
@@ -114,12 +114,17 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
     # Evento de las dos marcas: se muestra el icono de linea de cada marca (Contegral y Finca).
     marcas_icono = marca_payload if isinstance(marca_payload, list) else [marca_payload]
     marcas_icono = [m for m in marcas_icono if m] or [decision["marca"]]
+    # Evento de varias lineas (ej. porcicultura + avicultura): un icono por cada linea.
+    cats_icono = payload.get("categoria")
+    cats_icono = cats_icono if isinstance(cats_icono, list) and len(cats_icono) > 1 else [decision["categoria"]]
+    cats_icono = [normalizar_categoria(c) if c != decision["categoria"] else c for c in cats_icono]
     iconos = []
-    for sub_linea in sub_lineas:
-        for marca_i in marcas_icono:
-            icono = builder.asset_repo.get_category_icon(marca_i, decision["categoria"], sub_linea)
-            if icono and str(icono) not in iconos:
-                iconos.append(str(icono))
+    for cat_i in cats_icono:
+        for sub_linea in list(sub_lineas) + ([None] if None not in sub_lineas else []):
+            for marca_i in marcas_icono:
+                icono = builder.asset_repo.get_category_icon(marca_i, cat_i, sub_linea)
+                if icono and str(icono) not in iconos:
+                    iconos.append(str(icono))
     lockup_bottom = builder.draw_title_lockup(
         payload["palabra_categoria"], payload["palabra_titulo"], _normalizar_fecha(payload["fecha_texto"]),
         category_font=get_brand_font_name(marca_payload, "medium"),
