@@ -832,6 +832,11 @@ class InvitationCanvasBuilder:
         role_font = self._load_font(role_font_path, sz_rol)
         topic_font = self._load_font(topic_font_path, sz_rol)
         content_width = width - 2 * padding
+        # En eventos que mezclan lineas, cada charla trae el color y el icono de su propia linea.
+        if ponente.get("accent_color"):
+            accent_color = tuple(ponente["accent_color"])
+        icono_ruta = ponente.get("icon_path")
+        icono_lado = int(64 * escala) if icono_ruta else 0
 
         nombre_lineas = self._wrap_lines(ponente.get("name", "").upper(), name_font, content_width)
         rol_texto = ponente.get("role", "")
@@ -862,6 +867,9 @@ class InvitationCanvasBuilder:
         d.polygon(poligono, fill=tuple(bg_color) + (int(255 * bg_opacity),))
         d.line(poligono + [poligono[0]], fill=tuple(accent_color) + (255,), width=2 * S, joint="curve")
         self._componer_capa(capa.resize((w, h), Image.LANCZOS), int(x), int(y))
+        if icono_ruta:
+            # Insignia de la linea montada sobre la esquina superior derecha: no le quita ancho al texto.
+            self.paste_image(icono_ruta, x=int(x + width - icono_lado + 10), y=int(y - icono_lado * 0.55), max_size=(icono_lado, icono_lado))
 
         cursor_y = y + padding - 4
         cursor_y = self.draw_text_block(nombre_lineas, name_font_path, sz_nombre, texto_x, cursor_y, (255, 255, 255), "left", 8)

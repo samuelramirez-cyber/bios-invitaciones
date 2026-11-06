@@ -80,6 +80,24 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
     boxes = config["bounding_boxes"]
     accent = decision["accent_color"]
 
+    # --- Eventos que mezclan lineas (ej. porcicultura + avicultura): cada charla lleva el color y el
+    # icono de SU linea ("categoria" y "sub_linea" dentro de cada ponente). El color general de la pieza
+    # (titulo, divisor, recuadros) es el de la primera charla, como en las piezas de referencia. ---
+    por_linea = False
+    for ponente in decision["ponentes"]:
+        if not ponente.get("categoria"):
+            continue
+        por_linea = True
+        cat_p = normalizar_categoria(ponente["categoria"])
+        ponente["accent_color"] = CATEGORY_COLORS[cat_p]
+        marca_p = payload.get("marca")
+        marca_p = marca_p[0] if isinstance(marca_p, list) and marca_p else marca_p
+        icono_p = decision_engine.asset_repo.get_category_icon(marca_p, cat_p, ponente.get("sub_linea"))
+        if icono_p:
+            ponente["icon_path"] = str(icono_p)
+    if por_linea:
+        accent = next(p["accent_color"] for p in decision["ponentes"] if p.get("accent_color"))
+
     # --- Tipografia de marca: Contegral+Finca -> Alexandria, solo Contegral ->
     # Montserrat, solo Finca -> Akwe Pro (regla de negocio confirmada por el cliente) ---
     marca_payload = payload.get("marca")
@@ -119,7 +137,7 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
     cats_icono = cats_icono if isinstance(cats_icono, list) and len(cats_icono) > 1 else [decision["categoria"]]
     cats_icono = [normalizar_categoria(c) if c != decision["categoria"] else c for c in cats_icono]
     iconos = []
-    for cat_i in cats_icono:
+    for cat_i in ([] if por_linea else cats_icono):
         for sub_linea in list(sub_lineas) + ([None] if None not in sub_lineas else []):
             for marca_i in marcas_icono:
                 icono = builder.asset_repo.get_category_icon(marca_i, cat_i, sub_linea)
