@@ -505,6 +505,136 @@ class InvitationCanvasBuilder:
             c = [int(v * k) for v in c]
         return (c[0], c[1], c[2])
 
+    # ------------------------------------------------------------------
+    # Texto con negrita (**asi**) para promociones: frase de invitacion + oferta + nota
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _palabras_marcadas(texto: str) -> List[Tuple[str, bool]]:
+        """'a **b c** d' -> [('a', False), ('b', True), ('c', True), ('d', False)]."""
+        palabras, negrita = [], False
+        for trozo in re.split(r"(\*\*)", texto or ""):
+            if trozo == "**":
+                negrita = not negrita
+            else:
+                palabras += [(w, negrita) for w in trozo.split()]
+        return palabras
+
+    def _lineas_ricas(self, texto: str, f_ancha: ImageFont.ImageFont, max_width: int) -> List[List[Tuple[str, bool]]]:
+        """Parte el texto en lineas (con las reglas de _wrap_lines) conservando que palabras van en negrita."""
+        palabras = self._palabras_marcadas(texto)
+        if not palabras:
+            return []
+        lineas, i = [], 0
+        for linea in self._wrap_lines(" ".join(w for w, _ in palabras), f_ancha, max_width):
+            n = len(linea.split())
+            lineas.append(palabras[i:i + n])
+            i += n
+        return lineas
+
+    def _ancho_rico(self, linea, f_reg, f_neg) -> float:
+        esp = self.draw.textlength(" ", font=f_reg)
+        return sum(self.draw.textlength(w, font=(f_neg if b else f_reg)) for w, b in linea) + esp * (len(linea) - 1)
+
+    def _dibujar_rica(self, linea, cx, baseline, f_reg, f_neg, c_reg, c_neg) -> None:
+        esp = self.draw.textlength(" ", font=f_reg)
+        x = cx - self._ancho_rico(linea, f_reg, f_neg) / 2
+        for w, b in linea:
+            fuente = f_neg if b else f_reg
+            self.draw.text((x, baseline), w, font=fuente, fill=c_neg if b else c_reg, anchor="ls")
+            x += self.draw.textlength(w, font=fuente) + esp
+
+    def _titulo_rico(
+        self, intro, subtitulo, nota, f_reg_path, f_neg_path, accent, top_y, intro_size, sub_size,
+        max_width, text_color, max_bottom, caja_color, caja_opacidad,
+    ) -> Dict[str, int]:
+        """
+        Estructura de las promociones de referencia: frase de invitacion (lo marcado con ** va en negrita
+        y color de la linea, el resto en blanco), recuadro de color con la oferta (lo marcado en negrita
+        blanca) y, debajo, una nota pequena (unidades disponibles / condiciones). Devuelve lo mismo que
+        draw_event_title.
+        """
+        cx = self.width / 2
+        caja = self._color_caja(caja_color) if caja_color else None
+        f_i_reg, f_i_neg = self._load_font(f_reg_path, intro_size), self._load_font(f_neg_path, intro_size)
+        y = top_y
+        frame_y, gap_x0, gap_x1 = None, cx - 10, cx + 10
+
+        if intro and intro.strip():
+            lineas_i = self._lineas_ricas(intro, f_i_neg, max_width)
+            cap = self.draw.textbbox((0, 0), "H", font=f_i_reg)
+            cap_h, paso = cap[3] - cap[1], int((cap[3] - cap[1]) * 1.55)
+            idx_marco = min(1, len(lineas_i) - 1)
+            for k, linea in enumerate(lineas_i):
+                self._dibujar_rica(linea, cx, y + cap_h, f_i_reg, f_i_neg, text_color, accent)
+                if k == idx_marco:
+                    frame_y = y + cap_h // 2
+                    ancho = self._ancho_rico(linea, f_i_reg, f_i_neg)
+                    gap_x0, gap_x1 = cx - ancho / 2 - 24, cx + ancho / 2 + 24
+                y += paso
+            y += 14
+
+        # --- recuadro de la oferta (baja de tamano hasta caber) ---
+        pad_x, pad_v = 40, 24
+        tam = sub_size
+        nota_h = 0
+        while True:
+            f_reg, f_neg = self._load_font(f_reg_path, tam), self._load_font(f_neg_path, tam)
+            lineas_s = self._lineas_ricas(subtitulo, f_neg, min(max_width, 720))
+            cap_s = self.draw.textbbox((0, 0), "H", font=f_reg)
+            cap_hs = cap_s[3] - cap_s[1]
+            alto_caja = (len(lineas_s) - 1) * int(cap_hs * 1.5) + cap_hs + 2 * pad_v if lineas_s else 0
+            cabe = max_bottom is None or y + alto_caja + 120 <= max_bottom
+            if (cabe and len(lineas_s) <= 4) or tam <= 30:
+                break
+            tam -= 2
+
+        if lineas_s:
+            y0 = y
+            y_texto = y0 + pad_v
+            ancho_max = max(self._ancho_rico(l, f_reg, f_neg) for l in lineas_s)
+            x0, x1 = int(cx - ancho_max / 2 - pad_x), int(cx + ancho_max / 2 + pad_x)
+            y1 = int(y0 + alto_caja)
+            if caja:
+                S3 = 3
+                capa = Image.new("RGBA", ((x1 - x0) * S3, (y1 - y0) * S3), (0, 0, 0, 0))
+                ImageDraw.Draw(capa).rounded_rectangle(
+                    [0, 0, (x1 - x0) * S3 - 1, (y1 - y0) * S3 - 1], radius=14 * S3, fill=caja + (int(255 * caja_opacidad),),
+                )
+                self._componer_capa(capa.resize((x1 - x0, y1 - y0), Image.LANCZOS), x0, y0)
+            for linea in lineas_s:
+                self._dibujar_rica(linea, cx, y_texto + cap_hs, f_reg, f_neg, text_color, text_color)
+                y_texto += int(cap_hs * 1.5)
+            if frame_y is None:
+                frame_y = (y0 + y1) // 2
+                gap_x0, gap_x1 = x0 - 10, x1 + 10
+            bottom = y1
+        else:
+            bottom = int(y)
+            frame_y = frame_y if frame_y is not None else int(y)
+
+        # --- nota pequena bajo la oferta (unidades disponibles, condiciones) ---
+        if nota and nota.strip():
+            n_sz = max(int(sub_size * 0.62), 26)
+            fn_reg, fn_neg = self._load_font(f_reg_path, n_sz), self._load_font(f_neg_path, n_sz)
+            lineas_n = self._lineas_ricas(nota, fn_neg, min(max_width, 760))
+            cap_n = self.draw.textbbox((0, 0), "H", font=fn_reg)
+            cap_hn = cap_n[3] - cap_n[1]
+            yn = bottom + 24
+            if lineas_n:
+                # velo oscuro suave: la nota debe leerse sobre cualquier foto
+                bw = int(max(self._ancho_rico(l, fn_reg, fn_neg) for l in lineas_n) + 44)
+                y0n = int(yn - 14)
+                y1n = int(yn + (len(lineas_n) - 1) * int(cap_hn * 1.5) + cap_hn + 14)
+                capa = Image.new("RGBA", (bw * 3, (y1n - y0n) * 3), (0, 0, 0, 0))
+                ImageDraw.Draw(capa).rounded_rectangle([0, 0, bw * 3 - 1, (y1n - y0n) * 3 - 1], radius=14 * 3, fill=(0, 0, 0, 120))
+                self._componer_capa(capa.resize((bw, y1n - y0n), Image.LANCZOS), int(cx - bw / 2), y0n)
+            for linea in lineas_n:
+                self._dibujar_rica(linea, cx, yn + cap_hn, fn_reg, fn_neg, text_color, text_color)
+                yn += int(cap_hn * 1.5)
+            bottom = yn - int(cap_hn * 0.5) + 10
+        return {"bottom": int(bottom + 8), "frame_y": int(frame_y), "gap_x0": int(gap_x0), "gap_x1": int(gap_x1)}
+
     def draw_event_title(
         self,
         tema: str,
@@ -520,6 +650,10 @@ class InvitationCanvasBuilder:
         max_bottom: Optional[int] = None,
         caja_color: Optional[Tuple[int, int, int]] = None,
         caja_opacidad: float = 0.45,
+        intro: str = "",
+        nota: str = "",
+        rico_regular: Optional[str] = None,
+        rico_negrita: Optional[str] = None,
     ) -> Dict[str, int]:
         """
         Titulo centrado del evento: el TEMA / nombre de la charla (mayusculas, color
@@ -530,6 +664,11 @@ class InvitationCanvasBuilder:
         {"bottom", "frame_y" (Y por donde pasa el borde superior del marco), "gap_x0",
         "gap_x1" (rango X que el marco deja abierto)}.
         """
+        if not (tema and tema.strip()) and (intro.strip() or "**" in (subtitulo or "") or nota.strip()):
+            return self._titulo_rico(
+                intro, subtitulo, nota, rico_regular or subtitulo_font, rico_negrita or subtitulo_font, accent, top_y,
+                int(subtitulo_size * 0.76), subtitulo_size, max_width, text_color, max_bottom, caja_color, caja_opacidad,
+            )
         cx = self.width / 2
         caja = self._color_caja(caja_color) if caja_color else None
         ancho_sub_max = min(max_width, 640) if caja else max_width

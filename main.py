@@ -159,6 +159,7 @@ def generar_invitacion(payload: dict, output_path: Path) -> Path:
         top_y=lockup_bottom + marco["gap_after_lockup"],
         tema_size=marco["kicker_size"], subtitulo_size=marco["title_size"], max_width=fx1 - fx0 - 120,
         max_bottom=limite_titulo, caja_color=accent if payload.get("subtitulo_caja", True) else None,
+        intro=payload.get("intro", ""), nota=payload.get("nota", ""), rico_regular=font_regular, rico_negrita=font_bold,
     )
     gap_top = (titulo["gap_x0"], titulo["gap_x1"])
 

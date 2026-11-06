@@ -357,7 +357,7 @@ with tab_generar:
         # ---------------- Paso: datos del evento ----------------
         titulo_evento = subtitulo = fecha = hora = direccion = lugar = ciudad = telefono = ""
         tipo_activacion = None
-        descripcion_promocion = ""
+        descripcion_promocion = intro_promocion = ""
         fecha_inicio_promo = fecha_fin_promo = None
         unidades_disponibles = ""
 
@@ -389,13 +389,16 @@ with tab_generar:
                     pendientes["datos"].append("escribe el nombre o tema de la charla")
             else:
                 tipo_activacion = st.selectbox("Seleccione el tipo de activación", TIPOS_ACTIVACION, key="tipo_activacion")
+                intro_promocion = st.text_area(
+                    "Frase de invitación (opcional)", key="intro_promocion", max_chars=180,
+                    placeholder="Ej. **Acompáñanos el sábado 28 de noviembre,** tendremos asesoría nutricional especializada.",
+                    help="Va arriba del recuadro. Lo que pongas entre **dobles asteriscos** sale en negrita y en el color de la línea.",
+                )
+                _revisar_ortografia("Frase de invitación", intro_promocion, ort["datos"])
                 descripcion_promocion = st.text_area(
-                    "Describa en qué consiste la promoción", key="descripcion_promocion", max_chars=200,
-                    placeholder=(
-                        'Ej. "Por la compra de X unidades, lleva Y gratis" o "Nuestros expertos estarán '
-                        'con nosotros, visítanos para asesorarte. Tendremos regalos y sorpresas por tu '
-                        'compra en la marca."'
-                    ),
+                    "Describa en qué consiste la promoción (la oferta)", key="descripcion_promocion", max_chars=220,
+                    placeholder="Ej. Por la compra de 10 pollitos recibe **gratis 1 kg de alimento** de Finca Pollitos B.B. Preiniciación G.",
+                    help="Va dentro del recuadro de color. Lo que pongas entre **dobles asteriscos** sale en negrita.",
                 )
                 st.caption("Este texto queda sujeto a validación humana antes de publicarse.")
                 _revisar_ortografia("Descripción de la promoción", descripcion_promocion, ort["datos"])
@@ -412,10 +415,11 @@ with tab_generar:
                 ciudad = st.text_input("Municipio y departamento (opcional)", key="ciudad", placeholder="Ej. Labateca, Norte de Santander")
                 telefono = st.text_input("Teléfono de contacto (opcional)", key="telefono", placeholder="Ej. 310 895 92 33", max_chars=20)
                 unidades_disponibles = st.text_area(
-                    "Unidades disponibles de cada referencia involucrada", key="unidades_disponibles",
-                    placeholder="Ej. Ref. 1234 - 500 unidades; Ref. 5678 - 300 unidades",
+                    "Unidades disponibles y condiciones (nota bajo la oferta)", key="unidades_disponibles", max_chars=160,
+                    placeholder="Ej. *Disponibles 40 kilos de Pollito Iniciación. Hasta agotar existencias.",
                 )
-                st.caption("Dato administrativo — no se imprime en la pieza.")
+                st.caption("Se imprime en letra pequeña bajo la oferta: por norma legal las unidades disponibles deben verse.")
+                _revisar_ortografia("Unidades disponibles", unidades_disponibles, ort["datos"])
             _cierre_ortografia("datos", ort, pendientes)
 
         # ---------------- Paso: charlas (solo Charla Maestra / Dia de Campo) ----------------
@@ -599,6 +603,10 @@ with tab_generar:
                     if tipo_evento == "Actividad Promocional":
                         payload["tipo_activacion"] = tipo_activacion
                         payload["unidades_disponibles"] = unidades_disponibles
+                        if intro_promocion.strip():
+                            payload["intro"] = parrafo(intro_promocion)
+                        if unidades_disponibles.strip():
+                            payload["nota"] = " ".join(unidades_disponibles.split())
 
                     destino = OUTPUT_DIR / f"invitacion_{int(time.time() * 1000)}.png"
                     try:
