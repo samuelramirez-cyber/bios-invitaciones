@@ -375,10 +375,14 @@ class InvitationCanvasBuilder:
             f_head = self._load_font(headline_font, head_sz)
             f_strong = self._load_font(date_strong_font, date_sz)
             f_date = self._load_font(date_font, date_sz)
+            # Bloque largo (7 o mas datos: lugar, direccion, municipio, telefonos...): despues de la
+            # fecha y la hora los detalles van en letra mas pequena para que el bloque no crezca tanto.
+            compacto = len(date_lines) >= 7
+            f_det = self._load_font(date_font, int(date_sz * 0.76)) if compacto else f_date
 
             lineas_fecha: List[Tuple[str, ImageFont.ImageFont]] = []
             for i, item in enumerate(date_lines):
-                fuente = f_strong if i < strong_items else f_date
+                fuente = f_strong if i < strong_items else (f_det if compacto and i >= 2 else f_date)
                 for sub in self._wrap_lines(str(item), fuente, strong_max_width if i < strong_items else date_max_width):
                     lineas_fecha.append((sub, fuente))
 
@@ -438,15 +442,14 @@ class InvitationCanvasBuilder:
                     x_der -= w_icono + int(16 * escala)
 
         # Fecha/lugar: alineada a la izquierda, primera linea a la altura de la palabra de categoria.
-        pitch = int(date_sz * 1.22)
         y = top_y
+        date_bottom = top_y
         for texto, fuente in lineas_fecha:
             fb = cap_box(fuente)
             color = text_color if fuente is f_strong else muted_color
             self.draw.text((date_x, y - fb[1]), texto, font=fuente, fill=color)
-            y += pitch
-        fdb = cap_box(f_date)
-        date_bottom = top_y + pitch * (len(lineas_fecha) - 1) + (fdb[3] - fdb[1]) if lineas_fecha else top_y
+            date_bottom = y + (fb[3] - fb[1])
+            y += int(fuente.size * 1.22)
 
         bottom = int(max(title_bottom, date_bottom))
         self.draw_vertical_divider(int(divider_x), top_y - 6, bottom + 6, accent, divider_w)
